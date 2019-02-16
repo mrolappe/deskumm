@@ -1,0 +1,470 @@
+6.7.2004
+
+opcode
+0				end-object
+
+1,21,41,61,81,a1,c1,e1		put-actor %1b at %2w, %2w
+
+2,82				start-music %1b
+
+3				%v = actor-room(%1b)
+83
+
+4				if (%v <= %w1)
+84
+
+05 01				draw-object %w1 at %1w,%2w
+85 01
+
+05 02				draw-object image %1w
+85 02
+
+06				%v = actor-elevation(%1b)
+86
+
+07				state-of %1w is %2b
+47
+87
+c7
+
+08				if (%v != %1w)
+88
+
+09				actor %1b face-towards %2b
+49
+89
+c9
+
+0a				start-script %1b (%p)
+2a
+aa
+
+4a				start-script rec %1b (%p)
+6a
+8a
+ca
+ea
+
+0b				%v = valid-verb(%1w, %2b)
+4b
+8b
+cb
+
+0c
+8c
+	01			load-script %1b
+	02			load-sound %1b
+	03			load-costume %1b
+	04			load-room %1b
+	05			nuke-script %1b
+	06			nuke-sound %1b
+	07			nuke-costume %1b
+	08			nuke-room %1b
+	09			lock-script %1b
+	0a			lock-sound %1b
+	0b			lock-costume %1b
+	0c			lock-room %1b
+	0d			unlock-script %1b
+	0e			unlock-sound %1b
+	0f			unlock-costume %1b
+	10			unlock-room %1b
+	11			clear-heap
+	12			load-charset %1b
+	13			nuke-charset %1b
+
+0d
+4d
+8d
+cd
+	ff			walk %1b to-actor %2b
+	xx			walk %1b to-actor %2b with-in xx
+
+0e				put-actor %1b at-object %2w
+4e
+8e
+ce
+
+0f				%v = state-of %1w 
+8f
+
+10				%v = owner-of %1w
+90
+
+
+11				do-animation %1b %2b
+51
+91
+d1
+
+12				camera-pan-to %1w
+92
+
+13				actor %1b 
+53
+93
+d3
+	?1			costume %1b
+	?2			step-dist %1b, %2b
+	?3			sound %1b
+	?4			walk-animation %1b
+	?5			talk-animation %1b %2b
+	?6			stand-animation %1b
+	?7			animation %1b %2b %3b
+	?8			default
+	?9			elevation %1w
+	?a			animation default
+	?b			palette %1b in-slot %2b
+	?c			talk-color %1b
+	?d			name "%s"
+	?e			init-animation %1b
+	?f			???
+	?10			width %1b
+	?11			scale %1b %2b
+	?12			never-zclip
+	?13			always-zclip %1b
+	?14			ignore-boxes
+	?15			follow-boxes
+	?16			animation-speed %1b
+	ff			terminiert den 'opcode' (?13 opcd* ff)
+
+14
+94
+	fc			print-system
+	fd			print-debug
+	fe			print-text
+	ff			print-line
+	??			%w say-line
+
+15				%v = find-actor(%1b, %2b)
+55
+95
+d5
+
+16				%v = random(%1b)
+96
+
+17				%v &= %1w
+97
+
+18				jump %w
+
+19				do-sentence %s %1b %2w with %3w
+39
+59
+79
+99
+b9
+d9
+f9
+
+1a				%v = %1w
+9a
+
+1b				%v *= %1w
+9b
+
+1c				start-sound %1b
+9c
+
+1d				if (class-of %1w is %p)
+9d
+
+1e				walk %1b to %2w, %3w
+3e
+5e
+7e
+9e
+be
+de
+fe
+
+1f				if (%1b in-box %2b)
+5f
+9f
+df
+
+20				stop-music
+
+22				%v = animation-counter(%1b)
+a2
+
+23				%v = actor-y(%1w)
+a3
+
+24
+64
+a4
+e4
+	ffff ffff		come-out %1w in-room %2b
+	xxxx xxxx		come-out %1w in-room %2b walk-to %w, %w
+
+25				pick-up-object %1w in-room %2b
+65
+a5
+e5
+
+26				%v = ...
+a6
+
+27
+	01			*str%1b = "%s"
+	02			*str%1b = *str%2b
+	03			*str%1b[%2b] = %3b
+	04			%v = *%1b[%2b]
+	05			*%1b[%2b]
+
+28				if (!%v)
+
+29				owner-of %1w is %2b
+69
+a9
+e9
+
+2b				sleep-for %v jiffies
+
+2c
+	01			cursor on
+	02			cursor off
+	03			userput on
+	04			userput off
+	05			cursor soft-on
+	06			cursor soft-off
+	07			userput soft-on
+	08			userput soft-off
+	09			???
+	0a			cursor %1b image %2w
+	0b			cursor %1b hotspot %2b, %3b
+	0c			cursor %1b
+	0d			charset %1b
+	0e
+
+2d				put-actor %1b in-room %2b
+6d
+ad
+ed
+
+2e				sleep-for xxxxxxx jiffies
+
+30
+b0
+	01			set-box %1b to %2b 
+	02			set-box %1b scale %2b
+	03			set-box %1b slot %2b
+	04			set-box-path
+
+31				%v = inventory-size(%1b)
+b1
+
+32				camera-at %1w
+b2
+
+33
+73
+b3
+f3
+	01			room-scroll %1w to %2w
+	02			room-color %1w in-slot %2w
+	03			set-screen %1w to %2w
+	04			palette %1w in-slot %2w
+	05			shake on
+	06			shake off
+	07			room-scale %1w at %2w %1w at %2w in-slot %1b
+	08			nop
+	09			saveload-game %1b in-slot %2b
+	0a			fades %1w
+
+34				%v = proximity(%1w, %2b)
+74
+b4
+f4
+
+35				%v = find-object(%1b, %2b)
+75
+b5
+f5
+
+36				walk %1b to-object %2w
+76
+b6
+f6
+
+37				start-object %1w verb %2b (%p)
+77
+b7
+f7
+
+38				if (%v >= %1w)
+b8
+
+3a				%v -= %1w
+ba
+
+3b				%v = actor-scale(%1b)
+bb
+
+3c				stop-sound %1b
+bc
+
+3d				%v = find-inventory(%1b, %2b)
+7d
+bd
+fd
+
+3f				draw-box %1w, %2w to %1w, %2w color %3b
+7f
+bf
+ff
+
+40				cut-scene
+
+42				chains-script %1b (%p)
+c2
+
+
+43				%v = actor-x(%1w)
+c3
+
+44				if (%v > %1w)
+c4
+
+46				++%v
+
+48				if (%v == %1w)
+c8
+
+4c				sound-kludge %p
+
+52				camera-follow %1b
+d2
+
+54				new-name-of %1w is "%s"
+d4
+
+56				%v = actor-moving(%1b)
+d6
+
+57				%v |= %1w
+d7
+
+58				over-ride
+
+5a				%v += %1w
+da
+
+5b				%v /= %1w
+db
+
+5d				class-of %1w is %p
+dd
+
+60				freeze-scripts %w
+e0
+
+62				stop-script %1b
+e2
+
+63				%v = actor-facing(%1b)
+e3
+
+66				%v = closest-actor(%1b)
+e6
+
+67				%v = width %1w
+e7
+
+68				%v = script-running(%1b)
+e8
+
+6b				debug %1w
+eb
+
+6c				%v = actor-width(%1b)
+ec
+
+6e				stop-object %1b
+ee
+
+70				lights...
+f0
+
+71				%v = actor-costume(%1b)
+f1
+
+72				current-room %1b
+f2
+
+78				if (%v < %1w)
+f8
+
+7a				verb %1b
+fa
+	01			image %1w
+	02			name "%s"
+	03			color %1b
+	04			hicolor %1b
+	05			at %1w, %2w
+	06			on
+	07			off
+	08			delete
+	09			new
+	10			dimcolor %1b
+	11			dim
+	12			key %1b
+	13			center
+	16			image %1w in-room %2b
+	17			bakcolor %1b
+
+7b				%v = actor-box(%1b)
+fb
+
+7c				%v = sound-running(%1b)
+fc
+
+80				break-here
+
+98
+	01			restart
+	02			pause
+	03			quit
+
+a0				end-script
+
+a7 00				load-variables
+	01			%v to %v
+	02			*%1b to *%2b
+	03			in "%s"
+	04			+
+
+a7 01				save-variables
+	01			%v to %v
+	02			*%1b to *%2b
+	03			in "%s"
+	04			+
+
+a8				if (%v)
+
+ab 01				save-verbs %1b to %2b set %3b
+ab 02				restore-verbs %1b to %2b set %3b
+ab 03				delete-verbs %1b to %2b set %3b
+
+ac				%v = 
+	?01			%1w
+	?02			+
+	?03			-
+	?04			*
+	?05			/
+	?06			(%i)
+
+ae 01				wait-for-actor %1b
+ae 02				wait-for-message
+ae 03				wait-for-camera
+ae 04				wait-for-sentence
+
+c0				end-cut-scene
+
+c6				--%v
+
+cc				pseudoroom...
+
+d8 (siehe print)		say-line
+
