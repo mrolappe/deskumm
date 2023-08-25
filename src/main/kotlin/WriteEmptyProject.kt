@@ -17,13 +17,15 @@ fun main(args: Array<String>) {
     val baseName = args[0]
 
     writeEmptyDirFile(File("$baseName.000"))
-    writeEmptyDataFile(File("$baseName.017"))
+    writeEmptyDataFile(File("$baseName.001"))
 }
 
 fun writeEmptyDirFile(dirFile: File) {
+    val maximums = Maximums(charsetCount = 2u)
+
     DataOutputStream(XorOutputStream(FileOutputStream(dirFile))).use {
         it.writeDummyRnamBlock()
-        it.writeEmptyMaxsBlock()
+        it.writeMaxsBlock(maximums)
         it.writeDummyDrooBlock()
         it.writeDummyDscrBlock()
         it.writeEmptyBlock(DirectoryBlockId.DSOU)
@@ -36,24 +38,24 @@ fun writeEmptyDirFile(dirFile: File) {
 private fun DataOutputStream.writeDummyRnamBlock() {
     val blockIdBytes = DirectoryBlockId.RNAM.name.toByteArray()
     write(blockIdBytes, 0, 4)
-    writeInt(9)
+    writeInt(9)     // total length including block ID, length itself and end marker
     writeByte(0)   // end marker
 }
 
 private fun DataOutputStream.writeDummyDchrBlock() {
     val blockIdBytes = DirectoryBlockId.DCHR.name.toByteArray()
     write(blockIdBytes, 0, 4)
-    writeInt(20)
+    writeInt(20)    // total length including block ID, length itself and end marker
 
-    writeShortLittleEndian(2)
+    writeShortLittleEndian(2)       // itemCount
 
     // in welchem ROOM befindet sich das charset; muss eine raumnummer sind, für die im DROO ein
     // entsprechender eintrag existiert, damit das LECF ermittelt werden kann
-    writeByte(0)   // room
-    writeByte(4)   // room
+    writeByte(0)   // room (first dummy entry)
+    writeByte(1)   // room (first dummy entry)
 
     // offset relativ zum ROOM
-    writeIntLittleEndian(0)  // offs
+    writeIntLittleEndian(0)  // offs (first dummy entry)
     writeIntLittleEndian(151789)  // offs
 }
 
@@ -64,17 +66,25 @@ fun DataOutputStream.writeEmptyBlock(blockId: DirectoryBlockId) {
     writeShort(0)
 }
 
+data class Maximums(val charsetCount: UInt)
+
 /**
  * Für MI2 scheinen 9 Words Daten erwartet zu werden
  */
-fun DataOutputStream.writeEmptyMaxsBlock() {
+fun DataOutputStream.writeMaxsBlock(maximums: Maximums) {
     val blockIdBytes = DirectoryBlockId.MAXS.name.toByteArray()
     write(blockIdBytes, 0, 4)
     writeInt(26)
 
-    repeat(9) {
-        writeShortLittleEndian(200)
-    }
+    writeShortLittleEndian(200)                            // vars
+    writeShortLittleEndian(0x8001.toShort())                    // unknown
+    writeShortLittleEndian(200)                           // bit vars
+    writeShortLittleEndian(200)                           // local objs
+    writeShortLittleEndian(0x8002.toShort())                    // unknown
+    writeShortLittleEndian(maximums.charsetCount.toShort())     // charsets
+    writeShortLittleEndian(0x8003.toShort())                    // unknown
+    writeShortLittleEndian(0x8004.toShort())                    // unknown
+    writeShortLittleEndian(1)                    // inventory
 }
 
 fun DataOutputStream.writeDummyDrooBlock() {

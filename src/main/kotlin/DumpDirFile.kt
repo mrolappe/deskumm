@@ -24,6 +24,30 @@ val defaultBlockHandler = { blockId: DirectoryBlockId, blockLength: BlockLength,
     println("Block: $blockId, Länge: $blockLength")
 }
 
+val maxsBlockHandler = { blockId: DirectoryBlockId, blockLength: BlockLength, data: DataInput ->
+    println("Block: $blockId, Länge: $blockLength")
+
+    val varCount = data.readShortLittleEndian().toUInt()
+    val unknown = data.readShortLittleEndian().toUInt()
+    val bitVarCount = data.readShortLittleEndian().toUInt()
+    val localObjCount = data.readShortLittleEndian().toUInt()
+    val unknown2 = data.readShortLittleEndian().toUInt()
+    val numCharsets = data.readShortLittleEndian().toUInt()
+    val unknown3 = data.readShortLittleEndian().toUInt()
+    val unknown4 = data.readShortLittleEndian().toUInt()
+    val inventoryCount = data.readShortLittleEndian().toUInt()
+
+    println("varCount: $varCount")
+    println("unknown: $unknown")
+    println("bitVarCount: $bitVarCount")
+    println("localObjCount: $localObjCount")
+    println("unknown2: $unknown2")
+    println("numCharsets: $numCharsets")
+    println("unknown3: $unknown3")
+    println("unknown4: $unknown4")
+    println("inventoryCount: $inventoryCount")
+}
+
 val drooBlockHandler = { blockId: DirectoryBlockId, blockLength: BlockLength, data: DataInput ->
     println("Block: $blockId, Länge: $blockLength")
 
@@ -105,7 +129,7 @@ fun main(args: Array<String>) {
     inputStream.use {
         val blockHandlers = hashMapOf<DirectoryBlockId, BlockHandler>(
                 DirectoryBlockId.RNAM to defaultBlockHandler,
-                DirectoryBlockId.MAXS to defaultBlockHandler,
+                DirectoryBlockId.MAXS to maxsBlockHandler,
                 DirectoryBlockId.DROO to drooBlockHandler,
                 DirectoryBlockId.DSCR to dscrBlockHandler,
                 DirectoryBlockId.DSOU to defaultBlockHandler,
