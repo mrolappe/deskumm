@@ -2,7 +2,6 @@ package jmj.deskumm.listdatafileblocks
 
 import java.io.File
 import java.io.RandomAccessFile
-import javax.xml.crypto.Data
 import kotlin.experimental.xor
 import kotlin.system.exitProcess
 
@@ -19,7 +18,7 @@ fun main(args: Array<String>) {
 
 enum class DataFileBlockId {
     LECF, LOFF, LFLF, ROOM, RMHD, CYCL, TRNS, EPAL, BOXD, BOXM, CLUT, SCAL, RMIM, OBIM, OBCD, EXCD,
-    ENCD, NLSC, LSCR, COST, SCRP, CHAR
+    ENCD, NLSC, LSCR, COST, SCRP, CHAR, SOUN
 }
 
 typealias BlockHandler = () -> Unit
@@ -47,6 +46,7 @@ class LSCRBlockInfo : BlockInfo(hasChildren = false)
 class COSTBlockInfo : BlockInfo(hasChildren = false)
 class SCRPBlockInfo : BlockInfo(hasChildren = false)
 class CHARBlockInfo : BlockInfo(hasChildren = false)
+class SOUNBlockInfo : BlockInfo(hasChildren = false)
 
 fun listDataFileBlocks(dataFile: RandomAccessFile) {
     val blockHandlers = hashMapOf<DataFileBlockId, BlockInfo>(
@@ -71,7 +71,8 @@ fun listDataFileBlocks(dataFile: RandomAccessFile) {
             DataFileBlockId.LSCR to LSCRBlockInfo(),
             DataFileBlockId.COST to COSTBlockInfo(),
             DataFileBlockId.SCRP to SCRPBlockInfo(),
-            DataFileBlockId.CHAR to CHARBlockInfo()
+            DataFileBlockId.CHAR to CHARBlockInfo(),
+        DataFileBlockId.SOUN to SOUNBlockInfo()
     )
 
     dataFile.use {
