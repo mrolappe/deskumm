@@ -3,8 +3,8 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/deskumm.iml" filepath="$PROJECT_DIR$/.idea/modules/deskumm.iml" />
-      <module fileurl="file://$PROJECT_DIR$/.idea/modules/deskumm_main.iml" filepath="$PROJECT_DIR$/.idea/modules/deskumm_main.iml" group="deskumm" />
-      <module fileurl="file://$PROJECT_DIR$/.idea/modules/deskumm_test.iml" filepath="$PROJECT_DIR$/.idea/modules/deskumm_test.iml" group="deskumm" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/deskumm.main.iml" filepath="$PROJECT_DIR$/.idea/modules/deskumm.main.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/deskumm.test.iml" filepath="$PROJECT_DIR$/.idea/modules/deskumm.test.iml" />
     </modules>
   </component>
 </project>

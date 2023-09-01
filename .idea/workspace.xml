@@ -1,14 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
   <component name="ChangeListManager">
-    <list default="true" id="3e3f4d05-b5eb-4b19-87bf-fca54ea20d9d" name="Default Changelist" comment="">
-      <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/kotlin/Deskumm.kt" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/kotlin/Deskumm.kt" afterDir="false" />
-    </list>
-    <ignored path="$PROJECT_DIR$/.gradle/" />
-    <ignored path="$PROJECT_DIR$/build/" />
-    <ignored path="$PROJECT_DIR$/out/" />
-    <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
+    <list default="true" id="3e3f4d05-b5eb-4b19-87bf-fca54ea20d9d" name="Default Changelist" comment="comment out broken test" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -116,6 +112,7 @@
   </component>
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+    <option name="UPDATE_TYPE" value="REBASE" />
   </component>
   <component name="IdeDocumentHistory">
     <option name="CHANGED_PATHS">
@@ -144,11 +141,15 @@
     <detection-done>true</detection-done>
     <sorting>DEFINITION_ORDER</sorting>
   </component>
+  <component name="MacroExpansionManager">
+    <option name="directoryName" value="fvb4hu1i" />
+  </component>
   <component name="ProjectFrameBounds" extendedState="6">
     <option name="x" value="-8" />
     <option name="width" value="1297" />
     <option name="height" value="1398" />
   </component>
+  <component name="ProjectId" id="2UTBfxtjarB8ajP60B4DRQ56mLe" />
   <component name="ProjectLevelVcsManager" settingsEditedManually="true" />
   <component name="ProjectView">
     <navigator currentView="PackagesPane" proportions="" version="1">
@@ -195,21 +196,25 @@
       </pane>
     </panes>
   </component>
-  <component name="PropertiesComponent">
-    <property name="Downloaded.Files.Path.Enabled" value="false" />
-    <property name="Repository.Attach.Annotations" value="false" />
-    <property name="Repository.Attach.JavaDocs" value="true" />
-    <property name="Repository.Attach.Sources" value="true" />
-    <property name="WebServerToolWindowFactoryState" value="false" />
-    <property name="aspect.path.notification.shown" value="true" />
-    <property name="com.android.tools.idea.instantapp.provision.ProvisionBeforeRunTaskProvider.myTimeStamp" value="1550523771451" />
-    <property name="com.intellij.testIntegration.createTest.CreateTestDialog.defaultLibrary" value="JUnit4" />
-    <property name="com.intellij.testIntegration.createTest.CreateTestDialog.defaultLibrarySuperClass.JUnit4" value="" />
-    <property name="project.structure.last.edited" value="Project" />
-    <property name="project.structure.proportion" value="0.0" />
-    <property name="project.structure.side.proportion" value="0.2" />
-    <property name="settings.editor.selected.configurable" value="preferences.keymap" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
   </component>
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;WebServerToolWindowFactoryState&quot;: &quot;false&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;master&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  }
+}</component>
   <component name="RecentsManager">
     <key name="CreateTestDialog.RecentsKey">
       <recent name="" />
@@ -222,19 +227,7 @@
       <recent name="C:\Users\jMj\sandkasten\deskumm" />
     </key>
   </component>
-  <component name="RunDashboard">
-    <option name="ruleStates">
-      <list>
-        <RuleState>
-          <option name="name" value="ConfigurationTypeDashboardGroupingRule" />
-        </RuleState>
-        <RuleState>
-          <option name="name" value="StatusDashboardGroupingRule" />
-        </RuleState>
-      </list>
-    </option>
-  </component>
-  <component name="RunManager" selected="Kotlin.jmj.deskumm.DeskummKt">
+  <component name="RunManager" selected="Kotlin.ListDataFileBlocksKt">
     <configuration default="true" type="Applet">
       <option name="HEIGHT" value="0" />
       <option name="POLICY_FILE" value="$APPLICATION_HOME_DIR$/bin/appletviewer.policy" />
@@ -257,111 +250,73 @@
         <option name="Make" enabled="true" />
       </method>
     </configuration>
-    <configuration name="SkreplKt" type="JetRunConfigurationType" factoryName="Kotlin" temporary="true" nameIsGenerated="true">
-      <module name="deskumm_main" />
-      <option name="VM_PARAMETERS" />
-      <option name="PROGRAM_PARAMETERS" />
-      <option name="ALTERNATIVE_JRE_PATH_ENABLED" value="false" />
-      <option name="ALTERNATIVE_JRE_PATH" />
-      <option name="PASS_PARENT_ENVS" value="true" />
-      <option name="MAIN_CLASS_NAME" value="SkreplKt" />
-      <option name="WORKING_DIRECTORY" />
-      <method v="2">
-        <option name="Make" enabled="true" />
-      </method>
-    </configuration>
-    <configuration default="true" type="JetRunConfigurationType" factoryName="Kotlin">
-      <option name="VM_PARAMETERS" />
-      <option name="PROGRAM_PARAMETERS" />
-      <option name="ALTERNATIVE_JRE_PATH_ENABLED" value="false" />
-      <option name="ALTERNATIVE_JRE_PATH" />
-      <option name="PASS_PARENT_ENVS" value="true" />
-      <option name="MAIN_CLASS_NAME" />
-      <option name="WORKING_DIRECTORY" />
-      <module name="" />
-      <method v="2">
-        <option name="Make" enabled="true" />
-      </method>
-    </configuration>
-    <configuration name="jmj.deskumm.DeskummKt" type="JetRunConfigurationType" factoryName="Kotlin" temporary="true" nameIsGenerated="true">
-      <module name="deskumm_main" />
-      <option name="VM_PARAMETERS" value="" />
-      <option name="PROGRAM_PARAMETERS" value="C:\Users\jMj\Nextcloud\scumm\entw\zeugs\SCRP\2.scrp" />
-      <option name="ALTERNATIVE_JRE_PATH_ENABLED" value="false" />
-      <option name="ALTERNATIVE_JRE_PATH" />
-      <option name="PASS_PARENT_ENVS" value="true" />
+    <configuration name="DeskummKt" type="JetRunConfigurationType" temporary="true" nameIsGenerated="true">
       <option name="MAIN_CLASS_NAME" value="jmj.deskumm.DeskummKt" />
-      <option name="WORKING_DIRECTORY" value="" />
+      <module name="deskumm.main" />
+      <option name="PROGRAM_PARAMETERS" value="$PROJECT_DIR$/../../../scumm/zeugs/SCRP/2.scrp" />
+      <shortenClasspath name="NONE" />
       <method v="2">
         <option name="Make" enabled="true" />
       </method>
     </configuration>
-    <configuration name="jmj.deskumm.dumpdirfile.DumpDirFileKt  turtles" type="JetRunConfigurationType" factoryName="Kotlin">
-      <module name="deskumm_main" />
-      <option name="VM_PARAMETERS" value="" />
-      <option name="PROGRAM_PARAMETERS" value="C:\Users\jMj\Nextcloud\scumm\turtles.scm\turtles.000" />
-      <option name="ALTERNATIVE_JRE_PATH_ENABLED" value="false" />
-      <option name="ALTERNATIVE_JRE_PATH" />
-      <option name="PASS_PARENT_ENVS" value="true" />
-      <option name="MAIN_CLASS_NAME" value="jmj.deskumm.dumpdirfile.DumpDirFileKt" />
-      <option name="WORKING_DIRECTORY" value="" />
-      <method v="2">
-        <option name="Make" enabled="true" />
-      </method>
-    </configuration>
-    <configuration name="jmj.deskumm.dumpdirfile.DumpDirFileKt mi2" type="JetRunConfigurationType" factoryName="Kotlin">
-      <module name="deskumm_main" />
-      <option name="VM_PARAMETERS" value="" />
-      <option name="PROGRAM_PARAMETERS" value="C:\Users\jMj\Nextcloud\scumm\mi2\monkey2.000" />
-      <option name="ALTERNATIVE_JRE_PATH_ENABLED" value="false" />
-      <option name="ALTERNATIVE_JRE_PATH" />
-      <option name="PASS_PARENT_ENVS" value="true" />
-      <option name="MAIN_CLASS_NAME" value="jmj.deskumm.dumpdirfile.DumpDirFileKt" />
-      <option name="WORKING_DIRECTORY" value="" />
-      <method v="2">
-        <option name="Make" enabled="true" />
-      </method>
-    </configuration>
-    <configuration name="jmj.deskumm.dumpdirfile.DumpDirFileKt mi2demo" type="JetRunConfigurationType" factoryName="Kotlin" temporary="true">
-      <module name="deskumm_main" />
-      <option name="VM_PARAMETERS" value="" />
-      <option name="PROGRAM_PARAMETERS" value="C:\Users\jMj\Nextcloud\scumm\entw\mi2demo\mi2demo.000" />
-      <option name="ALTERNATIVE_JRE_PATH_ENABLED" value="false" />
-      <option name="ALTERNATIVE_JRE_PATH" />
-      <option name="PASS_PARENT_ENVS" value="true" />
-      <option name="MAIN_CLASS_NAME" value="jmj.deskumm.dumpdirfile.DumpDirFileKt" />
-      <option name="WORKING_DIRECTORY" value="" />
-      <method v="2">
-        <option name="Make" enabled="true" />
-      </method>
-    </configuration>
-    <configuration name="jmj.deskumm.listdatafileblocks.ListDataFileBlocksKt" type="JetRunConfigurationType" factoryName="Kotlin" temporary="true" nameIsGenerated="true">
-      <module name="deskumm_main" />
-      <option name="VM_PARAMETERS" value="" />
-      <option name="PROGRAM_PARAMETERS" value="&quot;C:\Users\jMj\Nextcloud\scumm\turtles.scm\mi2demo.001&quot;" />
-      <option name="ALTERNATIVE_JRE_PATH_ENABLED" value="false" />
-      <option name="ALTERNATIVE_JRE_PATH" />
-      <option name="PASS_PARENT_ENVS" value="true" />
+    <configuration name="ListDataFileBlocksKt" type="JetRunConfigurationType" temporary="true" nameIsGenerated="true">
       <option name="MAIN_CLASS_NAME" value="jmj.deskumm.listdatafileblocks.ListDataFileBlocksKt" />
-      <option name="WORKING_DIRECTORY" value="" />
+      <module name="deskumm.main" />
+      <option name="PROGRAM_PARAMETERS" value="$PROJECT_DIR$/../../../../../OSXGemeinsamAlt/rlp-nextcloud/scumm/turtles.scm/turtles.001" />
+      <shortenClasspath name="NONE" />
       <method v="2">
         <option name="Make" enabled="true" />
       </method>
     </configuration>
-    <configuration name="jmj.deskumm.writeemptyproject.WriteEmptyProjectKt" type="JetRunConfigurationType" factoryName="Kotlin" temporary="true" nameIsGenerated="true">
-      <module name="deskumm_main" />
-      <option name="VM_PARAMETERS" value="" />
-      <option name="PROGRAM_PARAMETERS" value="C:\Users\jMj\Nextcloud\scumm\turtles.scm\turtles" />
-      <option name="ALTERNATIVE_JRE_PATH_ENABLED" value="false" />
-      <option name="ALTERNATIVE_JRE_PATH" />
-      <option name="PASS_PARENT_ENVS" value="true" />
+    <configuration name="SkreplKt" type="JetRunConfigurationType" temporary="true" nameIsGenerated="true">
+      <option name="MAIN_CLASS_NAME" value="SkreplKt" />
+      <module name="deskumm.main" />
+      <shortenClasspath name="NONE" />
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+    <configuration default="true" type="JetRunConfigurationType">
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="jmj.deskumm.dumpdirfile.DumpDirFileKt  turtles" type="JetRunConfigurationType">
+      <option name="MAIN_CLASS_NAME" value="jmj.deskumm.dumpdirfile.DumpDirFileKt" />
+      <option name="PROGRAM_PARAMETERS" value="C:\Users\jMj\Nextcloud\scumm\turtles.scm\turtles.000" />
+      <shortenClasspath name="NONE" />
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="jmj.deskumm.dumpdirfile.DumpDirFileKt mi2" type="JetRunConfigurationType">
+      <option name="MAIN_CLASS_NAME" value="jmj.deskumm.dumpdirfile.DumpDirFileKt" />
+      <module name="deskumm.main" />
+      <option name="PROGRAM_PARAMETERS" value="$PROJECT_DIR$/../../../../../OSXGemeinsamAlt/rlp-nextcloud/scumm/turtles.scm/monkey2.000" />
+      <shortenClasspath name="NONE" />
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="jmj.deskumm.dumpdirfile.DumpDirFileKt mi2demo" type="JetRunConfigurationType" temporary="true">
+      <option name="MAIN_CLASS_NAME" value="jmj.deskumm.dumpdirfile.DumpDirFileKt" />
+      <module name="deskumm.main" />
+      <option name="PROGRAM_PARAMETERS" value="$PROJECT_DIR$/../../../../../MyBookG1/sandkasten/mi2demo/mi2demo.000" />
+      <shortenClasspath name="NONE" />
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="jmj.deskumm.writeemptyproject.WriteEmptyProjectKt" type="JetRunConfigurationType" temporary="true" nameIsGenerated="true">
       <option name="MAIN_CLASS_NAME" value="jmj.deskumm.writeemptyproject.WriteEmptyProjectKt" />
-      <option name="WORKING_DIRECTORY" value="" />
+      <module name="deskumm_main" />
+      <option name="PROGRAM_PARAMETERS" value="C:\Users\jMj\Nextcloud\scumm\turtles.scm\turtles" />
       <method v="2">
         <option name="Make" enabled="true" />
       </method>
     </configuration>
     <configuration default="true" type="TestNG">
+      <option name="TEST_OBJECT" value="CLASS" />
       <option name="VM_PARAMETERS" />
       <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
       <properties />
@@ -384,16 +339,16 @@
       <item itemvalue="Kotlin.jmj.deskumm.dumpdirfile.DumpDirFileKt mi2" />
       <item itemvalue="Kotlin.jmj.deskumm.dumpdirfile.DumpDirFileKt mi2demo" />
       <item itemvalue="Kotlin.jmj.deskumm.writeemptyproject.WriteEmptyProjectKt" />
-      <item itemvalue="Kotlin.jmj.deskumm.listdatafileblocks.ListDataFileBlocksKt" />
+      <item itemvalue="Kotlin.ListDataFileBlocksKt" />
       <item itemvalue="Kotlin.SkreplKt" />
-      <item itemvalue="Kotlin.jmj.deskumm.DeskummKt" />
+      <item itemvalue="Kotlin.DeskummKt" />
     </list>
     <recent_temporary>
       <list>
-        <item itemvalue="Kotlin.jmj.deskumm.DeskummKt" />
+        <item itemvalue="Kotlin.ListDataFileBlocksKt" />
         <item itemvalue="Kotlin.SkreplKt" />
         <item itemvalue="Kotlin.jmj.deskumm.dumpdirfile.DumpDirFileKt mi2demo" />
-        <item itemvalue="Kotlin.jmj.deskumm.listdatafileblocks.ListDataFileBlocksKt" />
+        <item itemvalue="Kotlin.DeskummKt" />
         <item itemvalue="Kotlin.jmj.deskumm.writeemptyproject.WriteEmptyProjectKt" />
       </list>
     </recent_temporary>
@@ -408,7 +363,7 @@
       </map>
     </option>
   </component>
-  <component name="SpellCheckerSettings" BundledDictionaries="1" BundledDictionary0="english.dic" Folders="0" CustomDictionaries="0" Dictionaries="0" CorrectionsLimit="5" DefaultDictionary="project-level" UseSingleDictionary="true" />
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
   <component name="SvnConfiguration">
     <configuration />
   </component>
@@ -421,7 +376,60 @@
       <updated>1548615043630</updated>
       <workItem from="1549100024907" duration="604000" />
       <workItem from="1550124509353" duration="400000" />
+      <workItem from="1692953799940" duration="5156000" />
+      <workItem from="1693122085962" duration="931000" />
+      <workItem from="1693124129433" duration="3181000" />
+      <workItem from="1693564520356" duration="1124000" />
     </task>
+    <task id="LOCAL-00001" summary="upgrade gradle version,change to kotlin DSL">
+      <option name="closed" value="true" />
+      <created>1692956622205</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1692956622205</updated>
+    </task>
+    <task id="LOCAL-00002" summary="upgrade gradle version, change to kotlin DSL">
+      <option name="closed" value="true" />
+      <created>1692956631956</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1692956631956</updated>
+    </task>
+    <task id="LOCAL-00003" summary="latest lost+found changes, mainly regarding maximums">
+      <option name="closed" value="true" />
+      <created>1692957201256</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1692957201256</updated>
+    </task>
+    <task id="LOCAL-00004" summary="add .idea files">
+      <option name="closed" value="true" />
+      <created>1693568613374</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1693568613374</updated>
+    </task>
+    <task id="LOCAL-00005" summary="add SOUN block handler">
+      <option name="closed" value="true" />
+      <created>1693568648691</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1693568648691</updated>
+    </task>
+    <task id="LOCAL-00006" summary="comment out broken test">
+      <option name="closed" value="true" />
+      <created>1693568664878</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1693568664878</updated>
+    </task>
+    <option name="localTasksCounter" value="7" />
     <servers />
   </component>
   <component name="TestHistory">
@@ -487,7 +495,27 @@
     </layout>
   </component>
   <component name="TypeScriptGeneratedFilesManager">
-    <option name="processedProjectFiles" value="true" />
+    <option name="version" value="3" />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="upgrade gradle version,change to kotlin DSL" />
+    <MESSAGE value="upgrade gradle version, change to kotlin DSL" />
+    <MESSAGE value="latest lost+found changes, mainly regarding maximums" />
+    <MESSAGE value="add .idea files" />
+    <MESSAGE value="add SOUN block handler" />
+    <MESSAGE value="comment out broken test" />
+    <option name="LAST_COMMIT_MESSAGE" value="comment out broken test" />
   </component>
   <component name="antWorkspaceConfiguration">
     <option name="IS_AUTOSCROLL_TO_SOURCE" value="false" />
