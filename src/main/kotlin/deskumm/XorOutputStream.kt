@@ -1,4 +1,4 @@
-package jmj.deskumm.writeemptyproject
+package deskumm
 
 import java.io.OutputStream
 

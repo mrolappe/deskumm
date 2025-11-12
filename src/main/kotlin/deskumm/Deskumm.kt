@@ -1,13 +1,50 @@
-package jmj.deskumm
+package deskumm
 
+import com.github.ajalt.clikt.core.CliktCommand
+import com.github.ajalt.clikt.core.main
+import com.github.ajalt.clikt.parameters.arguments.argument
 import java.io.*
-import kotlin.system.exitProcess
 
-sealed class Opcode(val name: String, val length: Int) {
-    open fun toSource(): String = name
+
+fun main(args: Array<String>) = DeskummCommand().main(args)
+
+class DeskummCommand : CliktCommand() {
+    val scriptPath by argument(name = "script-path")
+
+    override fun run() {
+        val script = loadScript(File(scriptPath))
+
+        if (script == null) {
+            System.err.println("Scriptdatei $scriptPath konnte nicht geladen werden")
+        } else {
+            val opcodes = decodeInstructionsFromScriptBytes(script)
+            opcodes.forEach {
+                val (offset, opcode) = it
+                println("%6d %s".format(offset, opcode.toSource()))
+            }
+        }
+    }
+}
+
+sealed interface Instruction {
+    fun toSource(): String
+    val length: Int
+}
+
+abstract class Opcode(val name: String, override val length: Int) : Instruction {
+    override fun toSource(): String = name
 }
 
 object EndObject : Opcode("end-object", 1)
+
+class InvalidInstruction(val opcode: ByteArray) : Opcode("invalid-opcode", 1) {
+    constructor(opcode: Byte) : this(byteArrayOf(opcode))
+
+    override fun toSource(): String {
+        val opcodeHex = opcode.joinToString(" ") { "%02x".format(it) }
+        return "invalid-opcode $opcodeHex"
+    }
+}
 
 class DrawObjectAtOpcode(val obj: Int, val x: Int, val y: Int) : Opcode("draw-object at", 7) {
     override fun toSource(): String = "draw-object $obj at $x, $y"
@@ -15,6 +52,10 @@ class DrawObjectAtOpcode(val obj: Int, val x: Int, val y: Int) : Opcode("draw-ob
 
 class DrawObjectImageOpcode(val obj: Int, val img: Int) : Opcode("draw-object image", 4) {
     override fun toSource(): String = "draw-object $obj image $img"
+}
+
+class StartMusicInstr(val sound: ByteParam) : Opcode("start-music", 3)  {
+
 }
 
 // 0x04
@@ -233,8 +274,10 @@ typealias ObjSpec = Int
 
 // 67	@var = width @object
 class AssignObjectWidthToVar(val varSpec: VarSpec, val objSpec: ObjSpec) : Opcode("<var> = width <object>", 4) {
-    override fun toSource() = "${nameForVar(varSpec)} = width ${objSpecToString(objSpec)}"
 }
+
+object BreakHereInstr : Opcode("break-here", 1)
+object EndScriptInstr : Opcode("end-script", 1)
 
 // 0xa8 if (@var)
 class IfVarOpcode(val varSpec: VarSpec, val skipOffset: Int) : Opcode("if (@var)", 3) {
@@ -247,7 +290,7 @@ fun objSpecToString(objSpec: ObjSpec) = "obj$objSpec"
 
 
 sealed class VarSpec {
-    open abstract fun toSourceName(): String
+    abstract fun toSourceName(): String
 }
 
 class GlobalVarSpec(val varNum: Int) : VarSpec() {
@@ -266,24 +309,6 @@ class IfVarNotEqualOpcode(val varSpec: VarSpec, val value: Int, val skipOffset: 
     override fun toSource(): String = "if ${nameForVar(varSpec)} != $value (else skip $skipOffset)"
 }
 
-fun main(args: Array<String>) {
-    if (args.isEmpty()) {
-        System.err.println("Aufruf: Deskumm <Skriptdatei>")
-        exitProcess(10)
-    }
-
-    val script = loadScript(File(args[0]))
-
-    if (script == null) {
-        System.err.println("Scriptdatei ${args[0]} konnte nicht geladen werden")
-    } else {
-        val opcodes = buildOpcodesFromScriptBytes(script)
-        opcodes.forEach {
-            val (offset, opcode) = it
-            println("${opcode.toSource()}\t// offset: $offset")
-        }
-    }
-}
 
 val globalVarNames = mapOf(
         1 to "main-actor",
@@ -330,13 +355,13 @@ fun loadScript(path: File, xorDecode: Boolean = false): ByteArray? {
 }
 
 
-fun buildOpcodesFromScriptBytes(scriptBytes: ByteArray): List<Pair<Int, Opcode>> {
+fun decodeInstructionsFromScriptBytes(scriptBytes: ByteArray): List<Pair<Int, Opcode>> {
     var done = false
     var offset = 0
     val opcodes = mutableListOf<Pair<Int, Opcode>>()
 
     while (offset < scriptBytes.size) {
-        val opcode = decompileOpcode(scriptBytes, offset)
+        val opcode = decompileInstruction(scriptBytes, offset)
 
         if (opcode != null) {
             opcodes.add(Pair(offset, opcode))
@@ -366,11 +391,25 @@ fun DataInput.readWordParam(): WordParam {  // TODO WordVarParam
     return ImmediateWordParam(readShortLittleEndian().toInt().and(0xffff))
 }
 
-fun decompileOpcode(bytes: ByteArray, offset: Int): Opcode? {
+fun decompileInstruction(bytes: ByteArray, offset: Int): Opcode? {
     val data = DataInputStream(ByteArrayInputStream(bytes, offset, bytes.size - offset))
 
-    return when (data.readByte().toInt().and(0xff)) {
+    val opcode = data.readByte().toInt().and(0xff)
+    return when (opcode) {
         0 -> EndObject
+
+//        0x1, 0x21, 0x41, 0x61, 0x81, 0xa1, 0xc1, 0xe1 -> {
+//            PutActorAtInstruction()
+//        }
+
+//        0x2, 0x82 -> {
+//            if (opcode == 0x2) {
+//                StartMusicInstr(ImmediateByteParam(data.readByte().toInt()))
+//
+//            } else {
+//                StartMusicInstr(ByteVarParam())
+//            }
+//        }
 
         0x4, 0x84 -> {
             val data = DataInputStream(ByteArrayInputStream(bytes, offset, bytes.size - offset))
@@ -431,6 +470,9 @@ fun decompileOpcode(bytes: ByteArray, offset: Int): Opcode? {
             AssignObjectWidthToVar(varSpec, objSpec)
         }
 
+        0x80 -> BreakHereInstr
+        0xa0 -> EndScriptInstr
+
         0xa8 -> {
             val varSpec = toVarSpec(data.readShortLittleEndian().toInt())
             val skipOffset = data.readShortLittleEndian().toInt()
@@ -438,7 +480,7 @@ fun decompileOpcode(bytes: ByteArray, offset: Int): Opcode? {
             return IfVarOpcode(varSpec, skipOffset)
         }
 
-        else -> null
+        else -> InvalidInstruction(opcode.toByte())
     }
 }
 
@@ -463,11 +505,11 @@ fun decompileHeapStuffOpcode(bytes: ByteArray, offset: Int): Opcode? {
     val data = DataInputStream(ByteArrayInputStream(bytes, offset, bytes.size - offset))
 
     data.readByte() // 0xc
-    val opcode = data.readOpcodeAsInt()
+    val byte2 = data.readOpcodeAsInt()
 
-    val param = if (opcode != 0x11) data.readByte().toInt() else 0  // TODO byteVar
+    val param = if (byte2 != 0x11) data.readByte().toInt() else 0  // TODO byteVar
 
-    return when (opcode) {
+    return when (byte2) {
         1 -> LoadScriptOpcode(param)
         2 -> LoadSoundOpcode(param)
         3 -> LoadCostumeOpcode(param)
@@ -487,7 +529,7 @@ fun decompileHeapStuffOpcode(bytes: ByteArray, offset: Int): Opcode? {
         0x11 -> ClearHeapOpcode()
         0x12 -> LoadCharsetOpcode(param)
         0x13 -> NukeCharsetOpcode(param)
-        else -> null    // TODO 'unknown opcode' zurückgeben
+        else -> InvalidInstruction(byteArrayOf(0xc, byte2.toByte()))
     }
 }
 
@@ -495,9 +537,9 @@ fun decompileStringAssignOpcode(bytes: ByteArray, offset: Int): Opcode? {
     val data = DataInputStream(ByteArrayInputStream(bytes, offset, bytes.size - offset))
 
     data.readByte() // 0x27
-    val opcode = data.readOpcodeAsInt()
+    val byte2 = data.readOpcodeAsInt()
 
-    return when (opcode) {
+    return when (byte2) {
         1 -> {
             val str = data.readByte().toInt()   // TODO byte korrekt?
             val strVal = data.readString()
@@ -530,7 +572,8 @@ fun decompileStringAssignOpcode(bytes: ByteArray, offset: Int): Opcode? {
             val strIdx = data.readByte().toInt()
             PushStringCharAtIdxToVarOpcode(strVar, strIdx)
         }
-        else -> null
+
+        else -> InvalidInstruction(byteArrayOf(0x27, byte2.toByte()))
     }
 }
 
@@ -573,12 +616,12 @@ fun decompileIfNotEqualOpcode(bytes: ByteArray, offset: Int): Opcode? {
     return IfVarNotEqualOpcode(toVarSpec(varSpec), value, skipOffset)
 }
 
-fun decompileCursorOpcode(bytes: ByteArray, offset: Int): Opcode? {
+fun decompileCursorOpcode(bytes: ByteArray, offset: Int): Opcode {
     val data = DataInputStream(ByteArrayInputStream(bytes, offset, bytes.size - offset))
 
     data.readByte() // 0x2c
 
-    val opcode = when (data.readByte().toInt()) {
+    val instruction = when (val byte2 = data.readByte().toInt()) {
         1 -> CursorOn
         2 -> CursorOff
         3 -> UserPutOn
@@ -597,8 +640,8 @@ fun decompileCursorOpcode(bytes: ByteArray, offset: Int): Opcode? {
         0xc -> CursorOpcode(data.readByte().toInt())     // TODO parameter cursor
         0xd -> CharsetOpcode(data.readByte().toInt())          // TODO parameter charset
 
-        else -> null
+        else -> InvalidInstruction(byteArrayOf(0x2c, byte2.toByte()))
     }
 
-    return opcode
+    return instruction
 }

@@ -1,6 +1,6 @@
 plugins {
-//    id 'org.jetbrains.kotlin.jvm' version '1.3.20'
-    kotlin("jvm") version "1.9.10"
+    kotlin("jvm") version "2.2.21"
+    kotlin("plugin.serialization") version "2.2.21"
 //    id 'application'
 }
 
@@ -9,6 +9,9 @@ repositories {
 }
 
 dependencies {
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+
+    implementation("com.github.ajalt.clikt:clikt:5.0.3")
 //    implementation "org.jetbrains.kotlin:kotlin-stdlib"
 
 //    testCompile 'org.jetbrains.kotlin:kotlin-test'

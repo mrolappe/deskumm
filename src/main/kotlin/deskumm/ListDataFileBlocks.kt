@@ -1,5 +1,6 @@
-package jmj.deskumm.listdatafileblocks
+package deskumm
 
+import java.io.DataInput
 import java.io.File
 import java.io.RandomAccessFile
 import kotlin.experimental.xor
@@ -81,7 +82,17 @@ fun listDataFileBlocks(dataFile: RandomAccessFile) {
 
             val blockHeader = dataFile.readBlockHeader()
 
-            println("@$absoluteOffsetOfBlock: ${blockHeader.blockId}, len: ${blockHeader.blockLength}")
+            println("@$absoluteOffsetOfBlock: ${blockHeader.blockId}, len: ${blockHeader.blockLength} (end: ${absoluteOffsetOfBlock + blockHeader.blockLength})")
+
+            if (blockHeader.blockId == DataFileBlockId.LOFF) {
+                val numRooms = dataFile.readXorEncoded()
+                println("loff, numRooms: $numRooms")
+                for (i in 0 until numRooms) {
+                    val room = dataFile.readXorEncoded()
+                    val offset = dataFile.readIntLittleEndianXorEncoded()
+                    println("room: $room, offset: $offset")
+                }
+            }
 
             val blockInfo = blockHandlers[blockHeader.blockId]
 
@@ -102,25 +113,35 @@ typealias BlockLength = Int
 
 data class BlockHeader(val blockId: DataFileBlockId, val blockLength: BlockLength)
 
-fun RandomAccessFile.readBlockHeader(): BlockHeader {
+fun DataInput.readBlockHeader(): BlockHeader {
 //    println("readBlockHeader @ $filePointer")
     val blockId = readBlockId()
     val blockLength = readInt().xor(0x69696969)
     return BlockHeader(blockId, blockLength)
 }
 
-fun RandomAccessFile.readBlockId(): DataFileBlockId {
+fun DataInput.readBlockId(): DataFileBlockId {
     val idBytes = ByteArray(4)
     readXorEncoded(idBytes, 0, 4)
     return DataFileBlockId.valueOf(String(idBytes))
 }
 
-fun RandomAccessFile.readXorEncoded(buffer: ByteArray, offset: Int, length: Int, code: Byte = 0x69): Int {
-    val bytesRead = read(buffer, offset, length)
+fun DataInput.readXorEncoded(code: Byte = 0x69): Byte {
+    return readByte().xor(code)
+}
 
-    buffer.sliceArray(0..bytesRead - 1).mapIndexed { index, byte -> buffer[index] = byte.xor(code) }
+fun DataInput.readXorEncoded(buffer: ByteArray, code: Byte) {
+   readXorEncoded(buffer, 0, buffer.size, code)
+}
 
-    return bytesRead
+fun DataInput.readXorEncoded(buffer: ByteArray, offset: Int, length: Int, code: Byte = 0x69) {
+    readFully(buffer, offset, length)
+
+    buffer.sliceArray(0..< length).mapIndexed { index, byte -> buffer[index] = byte.xor(code) }
+}
+
+fun RandomAccessFile.readIntLittleEndianXorEncoded(): Int {
+    return readIntLittleEndian().xor(0x69696969)
 }
 
 fun printUsage() {

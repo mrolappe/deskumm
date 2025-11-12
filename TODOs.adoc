@@ -1,0 +1,2 @@
+- dump, create: sanity check directory
+* ensure related resources exist, e.g. script and its containing room

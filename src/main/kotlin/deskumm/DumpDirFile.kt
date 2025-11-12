@@ -1,11 +1,35 @@
-package jmj.deskumm.dumpdirfile
+package deskumm
 
-import jmj.deskumm.XorInputStream
-import jmj.deskumm.readIntLittleEndian
-import jmj.deskumm.readShortLittleEndian
+import com.github.ajalt.clikt.core.CliktCommand
+import com.github.ajalt.clikt.core.main
+import com.github.ajalt.clikt.parameters.arguments.argument
 import java.io.*
 import java.nio.charset.Charset
-import kotlin.system.exitProcess
+
+fun main(args: Array<String>) = DumpDirFileCommand().main(args)
+
+class DumpDirFileCommand : CliktCommand() {
+    val sourcePath by argument(name = "source-path", help = "Source path")
+
+    override fun run() {
+        val inputStream = File(sourcePath).xorInputStream()
+
+        inputStream.use {
+            val blockHandlers = hashMapOf<DirectoryBlockId, DirBlockHandler>(
+                DirectoryBlockId.RNAM to defaultBlockHandler,
+                DirectoryBlockId.MAXS to maxsBlockHandler,
+                DirectoryBlockId.DROO to drooBlockHandler,
+                DirectoryBlockId.DSCR to dscrBlockHandler,
+                DirectoryBlockId.DSOU to defaultBlockHandler,
+                DirectoryBlockId.DCOS to defaultBlockHandler,
+                DirectoryBlockId.DCHR to defaultGlobDirBlockHandler,
+                DirectoryBlockId.DOBJ to dobjBlockHandler)
+
+            parseDirectory(it, blockHandlers)
+        }
+    }
+}
+
 
 enum class DirectoryBlockId {
     RNAM,
@@ -18,7 +42,7 @@ enum class DirectoryBlockId {
     DOBJ
 }
 
-typealias BlockHandler = (DirectoryBlockId, BlockLength, DataInput) -> Unit
+typealias DirBlockHandler = (DirectoryBlockId, BlockLength, DataInput) -> Unit
 
 val defaultBlockHandler = { blockId: DirectoryBlockId, blockLength: BlockLength, data: DataInput ->
     println("Block: $blockId, Länge: $blockLength")
@@ -116,32 +140,9 @@ val dobjBlockHandler = { blockId: DirectoryBlockId, blockLength: BlockLength, da
     }
 }
 
-fun main(args: Array<String>) {
-    if (args.size != 1) {
-        showUsage()
-        exitProcess(5)
-    }
 
-    val sourcePath = args[0]
 
-    val inputStream = File(sourcePath).xorInputStream()
-
-    inputStream.use {
-        val blockHandlers = hashMapOf<DirectoryBlockId, BlockHandler>(
-                DirectoryBlockId.RNAM to defaultBlockHandler,
-                DirectoryBlockId.MAXS to maxsBlockHandler,
-                DirectoryBlockId.DROO to drooBlockHandler,
-                DirectoryBlockId.DSCR to dscrBlockHandler,
-                DirectoryBlockId.DSOU to defaultBlockHandler,
-                DirectoryBlockId.DCOS to defaultBlockHandler,
-                DirectoryBlockId.DCHR to defaultGlobDirBlockHandler,
-                DirectoryBlockId.DOBJ to dobjBlockHandler)
-
-        parseDirectory(it, blockHandlers)
-    }
-}
-
-fun parseDirectory(stream: InputStream, blockHandlers: Map<DirectoryBlockId, BlockHandler>): Unit {
+fun parseDirectory(stream: InputStream, blockHandlers: Map<DirectoryBlockId, DirBlockHandler>): Unit {
     var done = false
 
     while (!done) {
@@ -179,16 +180,11 @@ fun InputStream.readBlockId(): DirectoryBlockId? {
     }
 }
 
-typealias BlockLength = Int
-
 fun InputStream.readBlockLength(): BlockLength {
     val data = DataInputStream(this)
     return data.readInt()
 }
 
-fun showUsage() {
-    println("Aufruf: DumpDirFile <Quelldatei>")
-}
 
 const val MINIMUM_BLOCK_SIZE: Int = 512
 const val DEFAULT_BLOCK_SIZE: Int = 4096

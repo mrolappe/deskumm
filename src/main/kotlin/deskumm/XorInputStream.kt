@@ -1,4 +1,4 @@
-package jmj.deskumm
+package deskumm
 
 import java.io.InputStream
 
