@@ -1,6 +1,19 @@
-fun main(args: Array<String>) {
-    val skrepl = Skrepl
-    skrepl.repl()
+import com.github.ajalt.clikt.core.CliktCommand
+import com.github.ajalt.clikt.core.main
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+
+fun main(args: Array<String>) = SkreplCommand().main(args)
+
+class SkreplCommand : CliktCommand() {
+    override fun run() {
+        val tmpBla = TmpBla("bla", 123)
+        val json = Json.encodeToString(tmpBla)
+        println("tmp bla: $json")
+        val skrepl = Skrepl
+        skrepl.repl()
+    }
 }
 
 object Skrepl {
@@ -22,6 +35,9 @@ object Skrepl {
         done = true
     }
 }
+
+@Serializable
+data class TmpBla(val kling: String, val klang: Int)
 
 sealed class Command(val help: String) {
     abstract fun execute(skrepl: Skrepl)

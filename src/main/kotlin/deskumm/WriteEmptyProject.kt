@@ -60,7 +60,15 @@ object CursorSoftOffEmit {
     fun bytes(): ByteArray = byteArrayOf(0x27, 6)
 }
 
-class CursorSetCharset(val charset: Int) {
+class LoadCharsetInstr(val charset: Int) {
+    init {
+        require(charset in 1..<256) { "Illegal charset: $charset" }
+    }
+
+    fun bytes(): ByteArray = byteArrayOf(0x0c, 0x12, charset.toByte())
+}
+
+class CursorSetCharsetInstr(val charset: Int) {
     init {
         require(charset in 1..<256) { "Illegal charset: $charset" }
     }
@@ -88,7 +96,8 @@ fun writeDummyLecfFileForScript(path: Path) {
         byteStream.write(CursonOnEmit.bytes())
         byteStream.write(CursorSoftOnEmit.bytes())
 
-        byteStream.write(CursorSetCharset(1).bytes())
+        byteStream.write(CursorSetCharsetInstr(2).bytes())
+        byteStream.write(LoadCharsetInstr(2).bytes())
 
         byteStream.write(byteArrayOf(0x27, 1, 5) + "neu starten?0".toByteArray())
         byteStream.write(0)
@@ -185,7 +194,6 @@ private fun writeDummyLecfFileForCharset(path: Path) {
         lecfBlock.writeTo(out)
         charBlock?.writeTo(out)
     }
-//    block?.writeToFile(path)
 }
 
 private fun CharBlock.writeToFile(path: Path) {
@@ -248,7 +256,7 @@ fun readCharBlock(path: Path): CharBlock? {
 }
 
 fun writeEmptyDirFile(dirFile: File) {
-    val maximums = Maximums(charsetCount = 2u)
+    val maximums = Maximums(charsetCount = 3u)
 
     DataOutputStream(XorOutputStream(FileOutputStream(dirFile))).use {
 //        it.writeDummyRnamBlock()
@@ -318,9 +326,8 @@ private fun DataOutputStream.writeDummyDchrBlock() {
         // erster eintrag ist dummy
         DummyRoomNumberAndOffset,
 
-        // in welchem ROOM befindet sich das charset, und an welchem offset im ROOm-block; für die raumnummer muss im DROO ein
-        // entsprechender eintrag existierem, damit die datendatei (LECF) ermittelt werden kann
-        RoomNumberAndOffset(1, 22)
+        RoomNumberAndOffset(1, 22),
+        RoomNumberAndOffset(7, 77)
     )
 
     writeBlockId(DirectoryBlockId.DCHR)
