@@ -22,7 +22,7 @@ class DeskummCommand : CliktCommand() {
             instructions.forEach {
                 val (offset, opcode) = it
                 val bytesString = script.sliceArray(offset ..< offset + opcode.length).joinToString(" ") { "%02x".format(it) }
-                println("%6d %-64s %s".format(offset, opcode.toSource(), bytesString))
+                println("%6d %s\n       %s".format(offset, opcode.toSource(), bytesString))
             }
         }
     }
@@ -84,6 +84,16 @@ class ActorId(val id: Int) {
 
 class ObjId(val id: Int) {
     fun toSourceName(): String = "obj$id"
+}
+
+// 0x07/0x47/0x87/0xc7
+class StateOfObjectIsInstr(val objectParam: WordParam, val stateParam: ByteParam) : Instruction {
+    override fun toSource(): String {
+        return "state-of ${objectParam.toSource()} is ${stateParam.toSource()}"
+    }
+
+    override val length: Int
+        get() = 1 + objectParam.byteCount + stateParam.byteCount
 }
 
 // 0x09
@@ -239,6 +249,13 @@ class WalkActorToActorInstr(val actor1Param: ByteParam, val actor2Param: BytePar
         get() = 2 /* opcode, dist */ + actor1Param.byteCount + actor2Param.byteCount
 }
 
+// 0xe/0x4e/0x8e/0xce
+class PutActorAtObjectInstr(val actorParam: ByteParam, val objectParam: WordParam) : Instruction {
+    override fun toSource(): String = "put-actor ${actorParam.toSource()} at-object ${objectParam.toSource()}"
+    override val length: Int
+        get() = 1 + actorParam.byteCount + objectParam.byteCount
+}
+
 class ActorInstr(val actorParam: ByteParam, val subs: List<Sub>) : Instruction {
     sealed interface Sub {
         val byteSize: Int
@@ -250,7 +267,7 @@ class ActorInstr(val actorParam: ByteParam, val subs: List<Sub>) : Instruction {
         override val byteSize: Int
             get() = 1 + costumeParam.byteCount
         override val source: String
-            get() = "costume $costumeParam"
+            get() = "costume ${costumeParam.toSource()}"
     }
 
     // 0x8
@@ -266,7 +283,7 @@ class ActorInstr(val actorParam: ByteParam, val subs: List<Sub>) : Instruction {
         override val byteSize: Int
             get() = 1 + colorParam.byteCount
         override val source: String
-            get() = "talk-color $colorParam"
+            get() = "talk-color ${colorParam.toSource()}"
     }
 
     // 0xd
@@ -285,7 +302,7 @@ class ActorInstr(val actorParam: ByteParam, val subs: List<Sub>) : Instruction {
     }
 
     override fun toSource(): String {
-        return "TODO actor $actorParam ${subs.joinToString { it.source }}"
+        return "TODO actor ${actorParam.toSource()} ${subs.joinToString { it.source }}"
     }
 
     override val length: Int
@@ -330,11 +347,11 @@ class PrintInstr(val who: ByteParam, val subs: List<Sub>) : Instruction {
             get() = "say-voice ${offsetParam.toSource()}, ${delayParam.toSource()}"
     }
 
-    class Text(val text: String) : Sub {
+    class Text(val stringBytes: ByteArray) : Sub {
         override val byteSize: Int
-            get() = 2 /* opcode, \0 */ + text.length
+            get() = 2 /* opcode, \0 */ + stringBytes.size
         override val source: String
-            get() = "text \"$text\""
+            get() = "text \"${stringBytes.decodeToString()}\""
     }
 
     class Invalid(val opcode: Int) : Sub {
@@ -353,8 +370,20 @@ class PrintInstr(val who: ByteParam, val subs: List<Sub>) : Instruction {
 }
 
 // 0x18
-class JumpOpcode(val offset: Int) : Opcode("jump", 3) {
+class JumpInstr(val offset: Int) : Instruction {
     override fun toSource(): String = "jump $offset"
+    override val length: Int
+        get() = 3
+}
+
+// 0x19/0x39/0x59/0x79/0x99/0xb9/0xd9/0xf9
+class DoSentenceWithInstr(val verbParam: ByteParam, val object1Param: WordParam, val object2Param: WordParam) : Instruction {
+    override fun toSource(): String {
+        return "do-sentence ${verbParam.toSource()} ${object1Param.toSource()} with ${object2Param.toSource()}"
+    }
+
+    override val length: Int
+        get() = 1 + verbParam.byteCount + object1Param.byteCount + object2Param.byteCount
 }
 
 // 0x20
@@ -362,13 +391,10 @@ object StopMusicOpcode : Opcode("stop-music", 1)
 
 // 0x25, 0x65, 0xa5, 0xe5
 class PickUpObjectInstr(val objectParam: WordParam, val roomParam: ByteParam) : Instruction {
-    override fun toSource(): String {
-        return "pick-up-object $objectParam in-room $roomParam"
-    }
+    override fun toSource(): String = "pick-up-object ${objectParam.toSource()} in-room ${roomParam.toSource()}"
 
     override val length: Int
         get() = 1 + objectParam.byteCount + roomParam.byteCount
-
 }
 
 fun v5StringVarName(str: Int): String {
@@ -391,9 +417,12 @@ fun v5StringVarName(str: Int): String {
 }
 
 // 27 01	*@string = @zeichenkette
-class AssignLiteralToStringOpcode(val str: Int, val strVal: String, val opcodeLength: Int)
-    : Opcode("assign string", opcodeLength){
-    override fun toSource() = "${v5StringVarName(str)} = \"$strVal\""
+class AssignLiteralToStringInstr(val stringParam: ByteParam, val stringBytes: ByteArray) : Instruction {
+    override fun toSource() =
+        "${if (stringParam is ImmediateByteParam) v5StringVarName(stringParam.byte) else stringParam.toSource()} = \"${stringBytes.decodeToString()}\""
+
+    override val length: Int
+        get() = 3 /* opcode, string \0 */ + stringParam.byteCount + stringBytes.size
 }
 
 // 27 04	@var = *@str [@idx]
@@ -426,12 +455,18 @@ class JumpIfNullInstr(val varSpec: VarSpec, val jumpOffset: Int) : Instruction {
 
 // 0x29/0x69/0xa9/0xe9
 class OwnerOfInstr(val objectParam: WordParam, val ownerParam: ByteParam) : Instruction {
-    override fun toSource(): String {
-        return "owner-of $objectParam is $ownerParam"
-    }
+    override fun toSource(): String = "owner-of ${objectParam.toSource()} is ${ownerParam.toSource()}"
 
     override val length: Int
         get() = 1 + objectParam.byteCount + ownerParam.byteCount
+}
+
+// 0x2d/0x6d/0xad/0xed
+class PutActorInRoomInstr(val actorParam: ByteParam, val roomParam: ByteParam) : Instruction {
+    override fun toSource(): String = "put-actor ${actorParam.toSource()} in-room ${roomParam.toSource()}"
+
+    override val length: Int
+        get() = 1 + actorParam.byteCount + roomParam.byteCount
 }
 
 // 0x1a/0x9a
@@ -457,7 +492,7 @@ class RoomScrollInstr(val arg1: WordParam, val arg2: WordParam) : Instruction {
 }
 
 class SetScreenInstr(val arg1: WordParam, val arg2: WordParam) : Instruction {
-    override fun toSource(): String = "set-screen $arg1 to $arg2"
+    override fun toSource(): String = "set-screen ${arg1.toSource()} to ${arg2.toSource()}"
     override val length: Int
         get() = 2 /* opcode */ + arg1.byteCount + arg2.byteCount
 }
@@ -520,7 +555,7 @@ typealias ObjSpec = Int
 // 0x52/0xd2
 class CameraFollowInstr(val actorParam: ByteParam) : Instruction {
     override fun toSource(): String {
-        return "camera-follow $actorParam"
+        return "camera-follow ${actorParam.toSource()}"
     }
 
     override val length: Int
@@ -530,7 +565,7 @@ class CameraFollowInstr(val actorParam: ByteParam) : Instruction {
 // 0x54/0xd4
 class NewNameOfInstr(val objectParam: WordParam, val name: String) : Instruction {
     override fun toSource(): String {
-        return "new-name-of $objectParam is \"$name\""
+        return "new-name-of ${objectParam.toSource()} is \"$name\""
     }
 
     override val length: Int
@@ -551,7 +586,7 @@ class AddAssignInstr(val resultVar: ResultVar, val valueParam: WordParam) : Inst
 // 0x5d/0xdd
 class ClassOfInstr(val objectParam: WordParam, val classesParam: List<WordParam>) : Instruction {
     override fun toSource(): String {
-        return "class-of $objectParam is ${classesParam.joinToString(" ") { it.toString() }}"
+        return "class-of ${objectParam.toSource()} is ${classesParam.joinToString(" ") { it.toSource() }}"
     }
 
     override val length: Int
@@ -561,7 +596,11 @@ class ClassOfInstr(val objectParam: WordParam, val classesParam: List<WordParam>
 // 0x62/0xe2
 class StopScriptInstr(val scriptParam: ByteParam) : Instruction {
     override fun toSource(): String {
-        return "stop-script ${scriptParam.toSource()}"
+        return if (scriptParam is ImmediateByteParam && scriptParam.byte == 0) {
+            "stop-object-code"
+        } else {
+            "stop-script ${scriptParam.toSource()}"
+        }
     }
 
     override val length: Int
@@ -572,10 +611,25 @@ class StopScriptInstr(val scriptParam: ByteParam) : Instruction {
 class AssignObjectWidthToVar(val varSpec: VarSpec, val objSpec: ObjSpec) : Opcode("<var> = width <object>", 4) {
 }
 
-class CurrentRoomInstruction(val room: ByteParam) : Instruction {
-    override fun toSource(): String = "current-room $room"
+// 0x68/0xe8
+class ScriptRunningInstr(val resultVar: ResultVar, val scriptParam: ByteParam) : Instruction {
+    override fun toSource(): String = "${resultVar.toSource()} = script-running ${scriptParam.toSource()}"
     override val length: Int
-        get() = 1 + room.byteCount
+        get() = 1 + resultVar.byteCount + scriptParam.byteCount
+}
+
+// 0x71/0xf1
+class ActorCostumeInstr(val resultVar: ResultVar, val actorParam: ByteParam) : Instruction {
+    override fun toSource(): String = "${resultVar.toSource()} = actor-costume ${actorParam.toSource()}"
+    override val length: Int
+        get() = 1 + resultVar.byteCount + actorParam.byteCount
+}
+
+// 0x72/0xf2
+class CurrentRoomInstr(val roomParam: ByteParam) : Instruction {
+    override fun toSource(): String = "current-room ${roomParam.toSource()}"
+    override val length: Int
+        get() = 1 + roomParam.byteCount
 }
 
 object BreakHereInstr : Opcode("break-here", 1)
@@ -606,16 +660,86 @@ class SayLineInstr(val subs: List<PrintInstr.Sub>) : Instruction {
         return "say-line ${subs.joinToString(" ") { it.source }}"
     }
     override val length: Int
-        get() = 2 /* opcode, 0xff */ + subs.sumOf { it.byteSize }
+        get() {
+            return if (subs.any { it is PrintInstr.Text }) {
+                1 /* opcode */ + subs.sumOf { it.byteSize }
+            } else {
+                2 /* opcode, 0xff */ + subs.sumOf { it.byteSize }
+            }
+        }
 }
 
-class ExpressionInstr() : Instruction {
+class ExpressionInstr(val resultVar: ResultVar, val subs: List<Sub>) : Instruction {
+    sealed interface Sub {
+        val byteCount: Int
+        fun toSource(): String
+    }
+
+    // 0x1
+    class Value(val value: WordParam) : Sub {
+        override val byteCount: Int
+            get() = 1 + value.byteCount
+
+        override fun toSource(): String = value.toSource()
+
+    }
+
+    // 0x2
+    object Add : Sub {
+        override val byteCount: Int
+            get() = 1
+
+        override fun toSource(): String = "add"
+    }
+
+    // 0x3
+    object Subtract : Sub {
+        override val byteCount: Int
+            get() = 1
+
+        override fun toSource(): String = "subtract"
+    }
+
+    // 0x4
+    object Multiply : Sub {
+        override val byteCount: Int
+            get() = 1
+
+        override fun toSource(): String = "multiply"
+    }
+
+    // 0x5
+    object Divide : Sub {
+        override val byteCount: Int
+            get() = 1
+
+        override fun toSource(): String = "divide"
+    }
+
+    // 0x6
+    class Op(val op: ByteArray) : Sub {
+        override val byteCount: Int
+            get() = 1
+
+        override fun toSource(): String = "TODO expression op"
+    }
+
+
+    class Invalid(val bytes: ByteArray) : Sub {
+        override val byteCount: Int
+            get() = bytes.size
+
+        override fun toSource(): String {
+            return bytes.joinToString()
+        }
+
+    }
     override fun toSource(): String {
-        return "TODO expression"
+        return "TODO expression; ${resultVar.toSource()} = ${subs.joinToString(" ") { it.toSource() }}"
     }
 
     override val length: Int
-        get() = 5
+        get() = 2 /* opcode, final 0xff */ + resultVar.byteCount + subs.sumOf { it.byteCount }
 
 }
 
@@ -872,6 +996,13 @@ fun decompileInstruction(bytes: ByteArray, offset: Int): Instruction? {
             }
         }
 
+        0x7, 0x47, 0x87, 0xc7 -> {
+            val objectParam = readWordParam(data, opcode, 0x80)
+            val stateParam = readByteParam(data, opcode, 0x40)
+
+            StateOfObjectIsInstr(objectParam, stateParam)
+        }
+
         8 -> decompileIfNotEqualOpcode(bytes, offset)
 
         0x9, 0x49, 0x89, 0xc9 -> {
@@ -898,6 +1029,12 @@ fun decompileInstruction(bytes: ByteArray, offset: Int): Instruction? {
             WalkActorToActorInstr(actor1Param, actor2Param, distance)
         }
 
+        0x0e, 0x4e, 0x8e, 0xce -> {
+            val actorParam = readByteParam(data, opcode, 0x80)
+            val objectParam = readWordParam(data, opcode, 0x40)
+
+            PutActorAtObjectInstr(actorParam, objectParam)
+        }
         0x13, 0x53, 0x93, 0xd3 -> {
             val actorParam = readByteParam(data, opcode, 0x80)
             val subs = mutableListOf<ActorInstr.Sub>()
@@ -942,7 +1079,15 @@ fun decompileInstruction(bytes: ByteArray, offset: Int): Instruction? {
             PrintInstr(who, subs)
         }
 
-        0x18 -> JumpOpcode(data.readShortLittleEndian().toInt())
+        0x18 -> JumpInstr(data.readShortLittleEndian().toInt())
+
+        0x19, 0x39, 0x59, 0x79, 0x99, 0xb9, 0xd9, 0xf9 -> {
+            val verbParam = readByteParam(data, opcode, 0x80)
+            val object1Param = readWordParam(data, opcode, 0x40)
+            val object2Param = readWordParam(data, opcode, 0x20)
+
+            DoSentenceWithInstr(verbParam, object1Param, object2Param)
+        }
 
         0x1a, 0x9a -> {
             val varSpec = toVarSpec(data.readShortLittleEndian().toInt())
@@ -994,6 +1139,13 @@ fun decompileInstruction(bytes: ByteArray, offset: Int): Instruction? {
         }
 
         0x2c -> decompileCursorInstruction(bytes, offset)
+
+        0x2d, 0x6d, 0xad, 0xed -> {
+            val actorParam = readByteParam(data, opcode, 0x80)
+            val roomParam = readByteParam(data, opcode, 0x40)
+
+            PutActorInRoomInstr(actorParam, roomParam)
+        }
 
         0x33, 0x73, 0xb3, 0xf3 -> {
             val opcode2 = data.readUnsignedByte()
@@ -1085,10 +1237,21 @@ fun decompileInstruction(bytes: ByteArray, offset: Int): Instruction? {
             AssignObjectWidthToVar(varSpec, objSpec)
         }
 
-        0x72, 0xf2 -> {
-            val room = readByteParam(data, opcode, 0x80)
-            CurrentRoomInstruction(room)
+        0x68, 0xe8 -> {
+            val resultVar = readResultVar(data)
+            val scriptParam = readByteParam(data, opcode, 0x80)
+
+            ScriptRunningInstr(resultVar, scriptParam)
         }
+
+        0x71, 0xf1 -> {
+            val resultVar = readResultVar(data)
+            val actorParam = readByteParam(data, opcode, 0x80)
+
+            ActorCostumeInstr(resultVar, actorParam)
+        }
+
+        0x72, 0xf2 -> CurrentRoomInstr(readByteParam(data, opcode, 0x80))
 
         0x80 -> BreakHereInstr
         0xa0 -> EndScriptInstr
@@ -1101,14 +1264,28 @@ fun decompileInstruction(bytes: ByteArray, offset: Int): Instruction? {
         }
 
         0xac -> {
-            val varSpec = toVarSpec(data.readShortLittleEndian().toInt())
+            val resultVar = readResultVar(data)
             var opcode = data.readUnsignedByte()
 
-            while (opcode != 0xff) {
-                opcode = data.readUnsignedByte()
+            val subs = buildList {
+                while (opcode != 0xff) {
+                    val sub = when (opcode.and(0x1f)) {
+                        1 -> ExpressionInstr.Value(readWordParam(data, opcode, 0x80))
+                        2 -> ExpressionInstr.Add
+                        3 -> ExpressionInstr.Subtract
+                        4 -> ExpressionInstr.Multiply
+                        5 -> ExpressionInstr.Divide
+                        6 -> ExpressionInstr.Op(byteArrayOf(data.readUnsignedByte().toByte()))  // TODO
+                        else -> ExpressionInstr.Invalid(byteArrayOf(opcode.toByte()))
+                    }
+
+                    add(sub)
+
+                    opcode = data.readUnsignedByte()
+                }
             }
 
-            ExpressionInstr()
+            ExpressionInstr(resultVar, subs)
         }
 
         0xae -> {
@@ -1149,10 +1326,7 @@ private fun decodePrintSubs(data: DataInputStream): MutableList<PrintInstr.Sub> 
                 subs.add(PrintInstr.At(x, y))
             }
 
-            1 -> {
-                val color = readByteParam(data, opcode2, 0x80)
-                subs.add(PrintInstr.Color(color))
-            }
+            1 -> subs.add(PrintInstr.Color(readByteParam(data, opcode2, 0x80)))
 
             4 -> subs.add(PrintInstr.Center)
 
@@ -1163,8 +1337,8 @@ private fun decodePrintSubs(data: DataInputStream): MutableList<PrintInstr.Sub> 
             }
 
             15 -> {
-                val stringBytes = readBytesUntilZeroByte(data)
-                subs.add(PrintInstr.Text(stringBytes.decodeToString()))
+                subs.add(PrintInstr.Text(readBytesUntilZeroByte(data)))
+                break
             }
 
             else -> subs.add(PrintInstr.Invalid(opcode2))
@@ -1221,6 +1395,7 @@ fun readWordParam(data: DataInput, opcode: Int, parameterMask: Int): WordParam {
 
 class ResultVar(val varNum: Int) {
     val byteCount: Int get() = 2
+    fun toSource(): String = "resultVar$varNum"
 }    // TODO indexed etc.
 
 fun readResultVar(data: DataInput): ResultVar {
@@ -1237,35 +1412,34 @@ fun readResultVar(data: DataInput): ResultVar {
 
 fun toObjSpec(objSpec: Int) = objSpec
 
-fun DataInput.readOpcodeAsInt() = readByte().toInt()
-
 fun DataInput.readScummStringBytes(): ByteArray {    // TODO control code
-    val byteBuffer = ByteArrayOutputStream()
-    var strByte = readByte().toInt().and(0xff)
+    val stringBytes = ByteArrayOutputStream()
+    var sourceByte = readUnsignedByte()
 
-    while (strByte != 0) {
-        if (strByte == 0xff) {
-            strByte = readByte().toInt()
+    while (sourceByte != 0) {
+        stringBytes.write(sourceByte)
 
-            when (strByte.and(0xff)) {
+        if (sourceByte == 0xff) {
+            sourceByte = readUnsignedByte()
+            stringBytes.write(sourceByte)
+
+            when (sourceByte) {
                 1, 2, 3, 8 -> {}
                 4 -> {
-                    byteBuffer.write(readByte().toInt().and(0xff))
-                    byteBuffer.write(readByte().toInt().and(0xff))
+                    stringBytes.write(readUnsignedByte())
+                    stringBytes.write(readUnsignedByte())
                 }
                 else -> {
-                    byteBuffer.write(readByte().toInt().and(0xff))
-                    byteBuffer.write(readByte().toInt().and(0xff))
+                    stringBytes.write(readUnsignedByte())
+                    stringBytes.write(readUnsignedByte())
                 }
             }
-        } else {
-            byteBuffer.write(strByte)
         }
 
-        strByte = readByte().toInt()
+        sourceByte = readUnsignedByte()
     }
 
-    return byteBuffer.toByteArray()
+    return stringBytes.toByteArray()
 }
 
 // 0xc xx
@@ -1273,11 +1447,11 @@ fun decompileHeapStuffOpcode(bytes: ByteArray, offset: Int): Instruction {
     val data = DataInputStream(ByteArrayInputStream(bytes, offset, bytes.size - offset))
 
     data.readByte() // 0xc
-    val byte2 = data.readOpcodeAsInt()
+    val opcode2 = data.readUnsignedByte()
 
-    val param = if (byte2 != 0x11) data.readByte().toInt() else 0  // TODO byteVar
+    val param = if (opcode2 != 0x11) data.readByte().toInt() else 0  // TODO byteVar
 
-    return when (byte2) {
+    return when (opcode2) {
         1 -> LoadScriptOpcode(param)
         2 -> LoadSoundOpcode(param)
         3 -> LoadCostumeOpcode(param)
@@ -1297,7 +1471,7 @@ fun decompileHeapStuffOpcode(bytes: ByteArray, offset: Int): Instruction {
         0x11 -> ClearHeapOpcode()
         0x12 -> LoadCharsetOpcode(param)
         0x13 -> NukeCharsetOpcode(param)
-        else -> InvalidInstruction(byteArrayOf(0xc, byte2.toByte()))
+        else -> InvalidInstruction(byteArrayOf(0xc, opcode2.toByte()))
     }
 }
 
@@ -1305,14 +1479,13 @@ fun decompileStringAssignOpcode(bytes: ByteArray, offset: Int): Instruction {
     val data = DataInputStream(ByteArrayInputStream(bytes, offset, bytes.size - offset))
 
     data.readByte() // 0x27
-    val byte2 = data.readOpcodeAsInt()
+    val opcode2 = data.readUnsignedByte()
 
-    return when (byte2) {
+    return when (opcode2.and(0x1f)) {
         1 -> {
-            val str = data.readByte().toInt()   // TODO byte korrekt?
+            val str = readByteParam(data, opcode2, 0x80)
             val stringBytes = data.readScummStringBytes()
-            val opcodeLength = 4 + stringBytes.size
-            AssignLiteralToStringOpcode(str, stringBytes.decodeToString(), opcodeLength)    // TODO convert to string
+            AssignLiteralToStringInstr(str, stringBytes)    // TODO convert to string
         }
 
         2 -> {
@@ -1341,7 +1514,7 @@ fun decompileStringAssignOpcode(bytes: ByteArray, offset: Int): Instruction {
             PushStringCharAtIdxToVarOpcode(strVar, strIdx)
         }
 
-        else -> InvalidInstruction(byteArrayOf(0x27, byte2.toByte()))
+        else -> InvalidInstruction(byteArrayOf(0x27, opcode2.toByte()))
     }
 }
 
@@ -1398,7 +1571,9 @@ fun decompileCursorInstruction(bytes: ByteArray, offset: Int): Instruction {
 
     data.readByte() // 0x2c
 
-    val instruction = when (val byte2 = data.readByte().toInt()) {
+    val opcode2 = data.readUnsignedByte()
+
+    val instruction = when (opcode2.and(0x1f)) {
         1 -> CursorOn
         2 -> CursorOff
         3 -> UserPutOn
@@ -1417,7 +1592,7 @@ fun decompileCursorInstruction(bytes: ByteArray, offset: Int): Instruction {
         0xc -> CursorOpcode(data.readByte().toInt())     // TODO parameter cursor
         0xd -> CharsetOpcode(data.readByte().toInt())          // TODO parameter charset
 
-        else -> InvalidInstruction(byteArrayOf(0x2c, byte2.toByte()))
+        else -> InvalidInstruction(byteArrayOf(0x2c, opcode2.toByte()))
     }
 
     return instruction
