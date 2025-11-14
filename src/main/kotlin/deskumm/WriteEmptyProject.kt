@@ -93,6 +93,7 @@ fun writeDummyLecfFileForScript(path: Path) {
 
         val byteStream = ByteArrayOutputStream()
 
+        byteStream.write(byteArrayOf(0x02, 0x00))   // start-music 0
         byteStream.write(CursonOnEmit.bytes())
         byteStream.write(CursorSoftOnEmit.bytes())
 
@@ -114,6 +115,9 @@ fun writeDummyLecfFileForScript(path: Path) {
         byteStream.write(byteArrayOf(0x27, 3, 21, 29, 5))
         byteStream.write(byteArrayOf(0x27, 3, 21, 30, 2))
 
+        byteStream.write(byteArrayOf(0x14, 0xfc.toByte(), 0x01, 0x09, 0xff.toByte()))   // print 252 color 9
+
+        byteStream.write(byteArrayOf(0x14, 0xfc.toByte(), 0x01, 0x0c, 0x0f, 0x48, 0x61, 0x72, 0x64, 0x20, 0x64, 0x69, 0x73, 0x6b, 0))
 //        byteStream.write(CurrentRoom(2).bytes())
 
         byteStream.write(
