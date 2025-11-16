@@ -42,13 +42,13 @@ enum class DirectoryBlockId {
     DOBJ
 }
 
-typealias DirBlockHandler = (DirectoryBlockId, BlockLength, DataInput) -> Unit
+typealias DirBlockHandler = (DirectoryBlockId, DataFileBlockLength, DataInput) -> Unit
 
-val defaultBlockHandler = { blockId: DirectoryBlockId, blockLength: BlockLength, data: DataInput ->
+val defaultBlockHandler = { blockId: DirectoryBlockId, blockLength: DataFileBlockLength, data: DataInput ->
     println("Block: $blockId, Länge: $blockLength")
 }
 
-val maxsBlockHandler = { blockId: DirectoryBlockId, blockLength: BlockLength, data: DataInput ->
+val maxsBlockHandler = { blockId: DirectoryBlockId, blockLength: DataFileBlockLength, data: DataInput ->
     println("Block: $blockId, Länge: $blockLength")
 
     val varCount = data.readShortLittleEndian().toUInt()
@@ -72,7 +72,7 @@ val maxsBlockHandler = { blockId: DirectoryBlockId, blockLength: BlockLength, da
     println("inventoryCount: $inventoryCount")
 }
 
-val drooBlockHandler = { blockId: DirectoryBlockId, blockLength: BlockLength, data: DataInput ->
+val drooBlockHandler = { blockId: DirectoryBlockId, blockLength: DataFileBlockLength, data: DataInput ->
     println("Block: $blockId, Länge: $blockLength")
 
     val roomCount = data.readShortLittleEndian().toInt()
@@ -89,7 +89,7 @@ val drooBlockHandler = { blockId: DirectoryBlockId, blockLength: BlockLength, da
     }
 }
 
-val dscrBlockHandler = { blockId: DirectoryBlockId, blockLength: BlockLength, data: DataInput ->
+val dscrBlockHandler = { blockId: DirectoryBlockId, blockLength: DataFileBlockLength, data: DataInput ->
     println("Block: $blockId, Länge: $blockLength")
 
     val scriptCount = data.readShortLittleEndian().toInt()
@@ -106,7 +106,7 @@ val dscrBlockHandler = { blockId: DirectoryBlockId, blockLength: BlockLength, da
     }
 }
 
-val defaultGlobDirBlockHandler = { blockId: DirectoryBlockId, blockLength: BlockLength, data: DataInput ->
+val defaultGlobDirBlockHandler = { blockId: DirectoryBlockId, blockLength: DataFileBlockLength, data: DataInput ->
     println("Block: $blockId, Länge: $blockLength")
 
     val itemCount = data.readShortLittleEndian().toInt()
@@ -123,7 +123,7 @@ val defaultGlobDirBlockHandler = { blockId: DirectoryBlockId, blockLength: Block
     }
 }
 
-val dobjBlockHandler = { blockId: DirectoryBlockId, blockLength: BlockLength, data: DataInput ->
+val dobjBlockHandler = { blockId: DirectoryBlockId, blockLength: DataFileBlockLength, data: DataInput ->
     println("Block: $blockId, Länge: $blockLength")
 
     val itemCount = data.readShortLittleEndian().toInt()
@@ -180,7 +180,7 @@ fun InputStream.readBlockId(): DirectoryBlockId? {
     }
 }
 
-fun InputStream.readBlockLength(): BlockLength {
+fun InputStream.readBlockLength(): DataFileBlockLength {
     val data = DataInputStream(this)
     return data.readInt()
 }

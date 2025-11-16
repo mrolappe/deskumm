@@ -1,20 +1,22 @@
 package deskumm
 
+import com.github.ajalt.clikt.core.CliktCommand
+import com.github.ajalt.clikt.core.main
+import com.github.ajalt.clikt.parameters.arguments.argument
+import com.github.ajalt.clikt.parameters.types.file
 import java.io.DataInput
-import java.io.File
 import java.io.RandomAccessFile
 import kotlin.experimental.xor
-import kotlin.system.exitProcess
 
-fun main(args: Array<String>) {
-    if (args.isEmpty()) {
-        printUsage()
-        exitProcess(10)
+fun main(args: Array<String>) = ListDataFileBlocksCommand().main(args)
+
+class ListDataFileBlocksCommand : CliktCommand() {
+    val dataFile by argument(name = "data-file").file(mustExist = true)
+
+    override fun run() {
+        val dataFile = RandomAccessFile(dataFile, "r")
+        listDataFileBlocks(dataFile)
     }
-
-    val dataFile = RandomAccessFile(File(args[0]), "r")
-
-    listDataFileBlocks(dataFile)
 }
 
 enum class DataFileBlockId {
@@ -50,7 +52,7 @@ class CHARBlockInfo : BlockInfo(hasChildren = false)
 class SOUNBlockInfo : BlockInfo(hasChildren = false)
 
 fun listDataFileBlocks(dataFile: RandomAccessFile) {
-    val blockHandlers = hashMapOf<DataFileBlockId, BlockInfo>(
+    val blockHandlers = hashMapOf(
             DataFileBlockId.LECF to LECFBlockInfo(),
             DataFileBlockId.LOFF to LOFFBlockInfo(),
             DataFileBlockId.LFLF to LFLFBlockInfo(),
@@ -109,15 +111,15 @@ fun listDataFileBlocks(dataFile: RandomAccessFile) {
     }
 }
 
-typealias BlockLength = Int
+typealias DataFileBlockLength = Int
 
-data class BlockHeader(val blockId: DataFileBlockId, val blockLength: BlockLength)
+data class DataFileBlockHeader(val blockId: DataFileBlockId, val blockLength: DataFileBlockLength)
 
-fun DataInput.readBlockHeader(): BlockHeader {
+fun DataInput.readBlockHeader(): DataFileBlockHeader {
 //    println("readBlockHeader @ $filePointer")
     val blockId = readBlockId()
     val blockLength = readInt().xor(0x69696969)
-    return BlockHeader(blockId, blockLength)
+    return DataFileBlockHeader(blockId, blockLength)
 }
 
 fun DataInput.readBlockId(): DataFileBlockId {
@@ -138,12 +140,4 @@ fun DataInput.readXorEncoded(buffer: ByteArray, offset: Int, length: Int, code: 
     readFully(buffer, offset, length)
 
     buffer.sliceArray(0..< length).mapIndexed { index, byte -> buffer[index] = byte.xor(code) }
-}
-
-fun RandomAccessFile.readIntLittleEndianXorEncoded(): Int {
-    return readIntLittleEndian().xor(0x69696969)
-}
-
-fun printUsage() {
-    System.err.println("Aufruf: ListDataFileBlocks <Datendatei-Pfad>")
 }

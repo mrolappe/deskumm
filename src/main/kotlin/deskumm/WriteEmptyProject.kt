@@ -60,7 +60,7 @@ object CursorSoftOffEmit {
     fun bytes(): ByteArray = byteArrayOf(0x27, 6)
 }
 
-class LoadCharsetInstr(val charset: Int) {
+class LoadCharsetInstrEmit(val charset: Int) {
     init {
         require(charset in 1..<256) { "Illegal charset: $charset" }
     }
@@ -86,19 +86,30 @@ class CurrentRoom(val room: Int) {
 
 fun writeDummyLecfFileForScript(path: Path) {
 //    val scrpBlock = readScrpBlock(Paths.get("data/SCRP/1.SCRP"))
-    val lecfBlock = LecfBlock(listOf(RoomAndOffset(1, 0)))
+    val lecfBlock = LecfBlock(listOf(RoomAndOffset(2, 0)))
 
     DataOutputStream(XorOutputStream(FileOutputStream(path.toFile()))).use { out ->
         lecfBlock.writeTo(out)
 
         val byteStream = ByteArrayOutputStream()
 
+        val drawBoxBytes = DrawBoxInstr(
+            ImmediateWordParam(10),
+            ImmediateWordParam(10),
+            ImmediateWordParam(150),
+            ImmediateWordParam(300),
+            ImmediateByteParam(2)
+        ).emitBytes()
+        println("draw box bytes: ${drawBoxBytes.contentToString()}")
+        byteStream.write(drawBoxBytes)
+
+        byteStream.write(CurrentRoom(2).bytes())
         byteStream.write(byteArrayOf(0x02, 0x00))   // start-music 0
         byteStream.write(CursonOnEmit.bytes())
         byteStream.write(CursorSoftOnEmit.bytes())
 
         byteStream.write(CursorSetCharsetInstr(2).bytes())
-        byteStream.write(LoadCharsetInstr(2).bytes())
+        byteStream.write(LoadCharsetInstrEmit(2).bytes())
 
         byteStream.write(byteArrayOf(0x27, 1, 5) + "neu starten?0".toByteArray())
         byteStream.write(0)
@@ -115,10 +126,13 @@ fun writeDummyLecfFileForScript(path: Path) {
         byteStream.write(byteArrayOf(0x27, 3, 21, 29, 5))
         byteStream.write(byteArrayOf(0x27, 3, 21, 30, 2))
 
+        // print 252 text "Hard disk"
+        byteStream.write(byteArrayOf(0x14, 0xfc.toByte(),0x0f, 0x48, 0x61, 0x72, 0x64, 0x20, 0x64, 0x69, 0x73, 0x6b, 0x00))
         byteStream.write(byteArrayOf(0x14, 0xfc.toByte(), 0x01, 0x09, 0xff.toByte()))   // print 252 color 9
 
+        // print 255 color 15 at 160, 8 center overhead
+        byteStream.write(byteArrayOf(0x14, 0xff.toByte(), 0x01, 0x0f, 0x00, 0xa0.toByte(), 0x00, 0x08, 0x00, 0x04, 0x07, 0xff.toByte()))
         byteStream.write(byteArrayOf(0x14, 0xfc.toByte(), 0x01, 0x0c, 0x0f, 0x48, 0x61, 0x72, 0x64, 0x20, 0x64, 0x69, 0x73, 0x6b, 0))
-//        byteStream.write(CurrentRoom(2).bytes())
 
         byteStream.write(
             byteArrayOf(
@@ -132,7 +146,9 @@ fun writeDummyLecfFileForScript(path: Path) {
             )
         )
 
-        byteStream.write(0xa0)      // end script
+        byteStream.write(drawBoxBytes)
+
+//        byteStream.write(0xa0)      // end script
         val scrpBlock = ScrpBlock(byteStream.toByteArray())
         scrpBlock?.writeTo(out)
     }
@@ -296,27 +312,11 @@ private fun DataOutputStream.writeDummyRnamBlock() {
     writeByte(0)   // end marker
 }
 
-data class BlockId4(val bytes: ByteArray) {
-    constructor(name: String) : this(name.toByteArray())
-
-    init {
-        require(bytes.size == 4)
-    }
-
-    companion object {
-        fun readFrom(input: DataInput): BlockId4 {
-            val buffer = ByteArray(4)
-            input.readFully(buffer)
-            return BlockId4(buffer)
-        }
-    }
-}
-
-private fun DataOutputStream.writeBlockId(blockId: BlockId4) {
+private fun DataOutput.writeBlockId(blockId: BlockId4) {
     write(blockId.bytes, 0, 4)
 }
 
-private fun DataOutputStream.writeBlockId(blockId: DirectoryBlockId) {
+private fun DataOutput.writeBlockId(blockId: DirectoryBlockId) {
     val blockIdBytes = blockId.name.toByteArray()
     write(blockIdBytes, 0, 4)
 }

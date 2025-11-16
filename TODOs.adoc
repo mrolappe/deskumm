@@ -2,3 +2,4 @@
 * ensure related resources exist, e.g. script and its containing room
 
 - scumm string parsing
+- verify logic of jump-if opcodes
