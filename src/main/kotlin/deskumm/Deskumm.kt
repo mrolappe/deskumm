@@ -65,6 +65,12 @@ class DrawObjectImageInstr(val objectParam: WordParam, val imageParam: WordParam
         get() = 2 + objectParam.byteCount + imageParam.byteCount
 }
 
+class DrawObject1fInstr(val objectParam: WordParam) : Instruction {
+    override fun toSource(): String = "draw-object ${objectParam.toSource()} nop-1f"
+    override val length: Int
+        get() = 2 + objectParam.byteCount
+}
+
 // 0x02, 0x82
 class StartMusicInstr(val soundParam: ByteParam) : Instruction  {
     override fun toSource(): String = "start-music ${soundParam.toSource()}"
@@ -131,16 +137,14 @@ class ActorFaceTowardsOpcode(val actorParam: ByteParam, val objectParam: WordPar
 }
 
 class StartScriptInstr(val scriptParam: ByteParam, val scriptArgs: List<WordParam>) : Instruction {
-    override fun toSource(): String {
-        return "TODO start-script ${scriptParam.toSource()} ${scriptArgs.joinToString { it.toSource() }}"
-    }
+    override fun toSource(): String = "start-script ${scriptParam.toSource()} ${scriptArgs.joinToString { it.toSource() }}"
 
     override val length: Int
         get() = 2 /* opcode, 0xff */ + scriptParam.byteCount + scriptArgs.sumOf { it.byteCount } + scriptArgs.size /* opcode before arg */
 }
 
 // 0x0b, 0x4b, 0x8b, 0xcb
-class ValidVerbFuncInstr(val resultVar: ResultVar, val aParam: WordParam, val bParam: WordParam) : Instruction {
+class AssignValidVerbInstr(val resultVar: ResultVar, val aParam: WordParam, val bParam: WordParam) : Instruction {
     override fun toSource(): String = "${resultVar.toSource()} := valid-verb ${aParam.toSource()} ${bParam.toSource()}"
 
     override val length: Int
@@ -338,6 +342,22 @@ class ActorInstr(val actorParam: ByteParam, val subs: List<Sub>) : Instruction {
             get() = "costume ${costumeParam.toSource()}"
     }
 
+    // 0x04
+    class WalkAnimation(val animationParam: ByteParam) : Sub {
+        override val byteSize: Int
+            get() = 1 + animationParam.byteCount
+        override val source: String
+            get() = "walk-animation ${animationParam.toSource()}"
+    }
+
+    // 0x05
+    class TalkAnimation(val fromParam: ByteParam, val toParam: ByteParam) : Sub {
+        override val byteSize: Int
+            get() = 1 + fromParam.byteCount + toParam.byteCount
+        override val source: String
+            get() = "talk-animation ${fromParam.toSource()} ${toParam.toSource()}"
+    }
+
     // 0x8
     object Default : Sub {
         override val byteSize: Int
@@ -355,11 +375,19 @@ class ActorInstr(val actorParam: ByteParam, val subs: List<Sub>) : Instruction {
     }
 
     // 0xd
-    class ActorName(val name: ScummStringBytesV5) : Sub {
+    class Name(val name: ScummStringBytesV5) : Sub {
         override val byteSize: Int
-            get() = 2 /* opcode + \0 */ + name.byteCount
+            get() = 1 /* opcode */ + name.byteCount
         override val source: String
             get() = "actor-name \"${name.toSource()}\""
+    }
+
+    // 0x14
+    object IgnoreBoxes : Sub {
+        override val byteSize: Int
+            get() = 1
+        override val source: String
+            get() = "ignore-boxes"
     }
 
     class Invalid(val opcode: Int) : Sub {
@@ -374,7 +402,7 @@ class ActorInstr(val actorParam: ByteParam, val subs: List<Sub>) : Instruction {
     }
 
     override val length: Int
-        get() = 2 /* opcode + 0xff */ + actorParam.byteCount + subs.sumOf { it.byteSize }
+        get() = 2 /* opcode + final 0xff */ + actorParam.byteCount + subs.sumOf { it.byteSize }
 }
 
 class PrintInstr(val who: ByteParam, val subs: List<Sub>) : Instruction {
@@ -806,23 +834,23 @@ class DrawBoxInstr(val xParam: WordParam, val yParam: WordParam, val x2Param: Wo
     override val length: Int
         get() = 2 + xParam.byteCount + yParam.byteCount + x2Param.byteCount + y2Param.byteCount + colorParam.byteCount
 
+    fun emit(out: DataOutput) {
+        val opcode1 = 0x3f.or(paramBits(xParam, 0x80)).or(paramBits(yParam, 0x40))
+        out.writeByte(opcode1)
+        xParam.emitBytes(out)
+        yParam.emitBytes(out)
+
+        val opcode2 = 0x0.or(paramBits(x2Param, 0x80).or(paramBits(y2Param, 0x40).or(paramBits(colorParam, 0x20))))
+        out.writeByte(opcode2)
+        x2Param.emitBytes(out)
+        y2Param.emitBytes(out)
+        colorParam.emitBytes(out)
+    }
+
     fun emitBytes(): ByteArray {
         val baos = ByteArrayOutputStream()
-
-        DataOutputStream(baos).use { out ->
-            val opcode1 = 0x3f.or(paramBits(xParam, 0x80)).or(paramBits(yParam, 0x40))
-            out.writeByte(opcode1)
-            xParam.emitBytes(out)
-            yParam.emitBytes(out)
-
-            val opcode2 = 0x0.or(paramBits(x2Param, 0x80).or(paramBits(y2Param, 0x40).or(paramBits(colorParam, 0x20))))
-            out.writeByte(opcode2)
-            x2Param.emitBytes(out)
-            y2Param.emitBytes(out)
-            colorParam.emitBytes(out)
-
-            return baos.toByteArray()
-        }
+        DataOutputStream(baos).use { out -> emit(out) }
+        return baos.toByteArray()
     }
 
     private fun paramBits(param: WordParam, bits: Int): Int = if (!param.isImmediate) bits else 0
@@ -1000,6 +1028,17 @@ class CurrentRoomInstr(val roomParam: ByteParam) : Instruction {
     override fun toSource(): String = "current-room ${roomParam.toSource()}"
     override val length: Int
         get() = 1 + roomParam.byteCount
+
+    fun emit(out: DataOutput) {
+        out.writeByte(0x72)
+        roomParam.emitBytes(out)
+    }
+
+    fun emitBytes(): ByteArray {
+        val baos = ByteArrayOutputStream()
+        DataOutputStream(baos).use { out -> emit(out) }
+        return baos.toByteArray()
+    }
 }
 
 // 0x78/0xf8
@@ -1308,6 +1347,11 @@ object WaitForMessageInstr : Instruction {
 
     override val length: Int
         get() = 2
+
+    fun emitTo(out: DataOutput) {
+        out.writeByte(0xae)
+        out.writeByte(0x02)
+    }
 }
 
 // 0xae 0x03
@@ -1587,7 +1631,7 @@ fun decompileInstruction(bytes: ByteArray, offset: Int): Instruction? {
             IfVarLessOrEqualOpcode(toVarSpec(varSpec), value, skipOffset)
         }
 
-        0x5, 0x85 -> {
+        0x05, 0x85 -> {
             val objectParam = readWordParam(data, opcode, 0x80)
             val opcode2 = data.readUnsignedByte()
 
@@ -1601,7 +1645,13 @@ fun decompileInstruction(bytes: ByteArray, offset: Int): Instruction? {
                     val stateParam = readWordParam(data, opcode2, 0x80)
                     DrawObjectImageInstr(objectParam, stateParam)
                 }
-                else -> InvalidInstruction(byteArrayOf(opcode.toByte(), opcode2.toByte()))
+
+                0x1f -> DrawObject1fInstr(objectParam)
+
+                else -> {
+                    val numBytes = 2 + objectParam.byteCount
+                    InvalidInstruction(bytes.sliceArray(offset until offset + numBytes))
+                }
             }
         }
 
@@ -1640,7 +1690,7 @@ fun decompileInstruction(bytes: ByteArray, offset: Int): Instruction? {
             val aParam = readWordParam(data, opcode, 0x80)
             val bParam = readWordParam(data, opcode, 0x40)
 
-            ValidVerbFuncInstr(resultVar, aParam, bParam)
+            AssignValidVerbInstr(resultVar, aParam, bParam)
         }
 
         0x0c, 0x8c -> decompileHeapStuffOpcode(bytes, offset)
@@ -1685,9 +1735,39 @@ fun decompileInstruction(bytes: ByteArray, offset: Int): Instruction? {
             while (opcode2 != 0xff) {
                 val sub = when (opcode2.and(0x1f)) {
                     1 -> ActorInstr.Costume(readByteParam(data, opcode2, 0x80))
+/*
+                    2 -> {
+                        val xParam = readByteParam(data, opcode2, 0x80)
+                        val yParam = readByteParam(data, opcode2, 0x40)
+                        ActorInstr.StepDist(xParam, yParam)
+                    }
+*/
+//                    3 -> ActorInstr.Sound(readByteParam(data, opcode2, 0x80))
+                    4 -> ActorInstr.WalkAnimation(readByteParam(data, opcode2, 0x80))
+                    5 -> ActorInstr.TalkAnimation(readByteParam(data, opcode2, 0x80), readByteParam(data, opcode2, 0x40))
+//                    6 -> ActorInstr.StandAnimation(readByteParam(data, opcode2, 0x80))
+//                    7 -> ActorInstr.Animation(readByteParam(data, opcode2, 0x80), readByteParam(data, opcode2, 0x40), readByteParam(data, opcode2, 0x20))
                     8 -> ActorInstr.Default
+//                    9 -> ActorInstr.Elevation(readWordParam(data, opcode2, 0x80))
+//                    10 -> ActorInstr.AnimationDefault
+/*
+                    11 -> {
+                        val paletteParam = readByteParam(data, opcode2, 0x80)
+                        val slotParam = readByteParam(data, opcode2, 0x40)
+                        ActorInstr.Palette(paletteParam, slotParam)
+                    }
+*/
                     12 -> ActorInstr.TalkColor(readByteParam(data, opcode2, 0x80))
-                    13 -> ActorInstr.ActorName(data.readScummStringBytes())
+                    13 -> ActorInstr.Name(data.readScummStringBytes())
+//                    14 -> ActorInstr.InitAnimation(readByteParam(data, opcode2, 0x80))
+//                    16 -> ActorInstr.Width(readByteParam(data, opcode2, 0x80))
+//                    17 -> ActorInstr.Scale(readByteParam(data, opcode2, 0x80), readByteParam(data, opcode2, 0x40))
+//                    18 -> ActorInstr.NeverZClip
+//                    19 -> ActorInstr.AlwaysZClip(readByteParam(data, opcode2, 0x80))
+                    20 -> ActorInstr.IgnoreBoxes
+//                    21 -> ActorInstr.FollowBoxes
+//                    22 -> ActorInstr.AnimationSpeed(readByteParam(data, opcode2, 0x80))
+//                    23 -> ActorInstr.Shadow(readByteParam(data, opcode2, 0x80))
                     else -> ActorInstr.Invalid(opcode2)
                 }
 

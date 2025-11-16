@@ -9,6 +9,7 @@ import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.types.boolean
 import com.github.ajalt.clikt.parameters.types.file
 import com.github.ajalt.clikt.parameters.types.int
+import java.io.File
 import java.io.RandomAccessFile
 
 fun main(args: Array<String>) {
@@ -22,6 +23,8 @@ class ExtractFromLecfCommand : CliktCommand() {
         .int()
     val blockId by argument(help = "ID of block to extract")
         .convert { DataFileBlockId.valueOf(it) }
+    val outFile by option("--out-file", help = "output file")
+        .file()
     val withBlockHeader by option("--with-block-header", help = "include block header")
         .boolean().default(true)
 
@@ -34,8 +37,8 @@ class ExtractFromLecfCommand : CliktCommand() {
             val blockHeaderAtOffset = file.readBlockHeader()
             println("$blockHeaderAtOffset, ok: ${blockId == blockHeaderAtOffset.blockId}")
 
-            RandomAccessFile("extract.out", "rw").use { outFile ->
-                if (withBlockHeader == true) {
+            RandomAccessFile(outFile ?: File("extract.out"), "rw").use { outFile ->
+                if (withBlockHeader) {
                     outFile.write(blockHeaderAtOffset.blockId.name.toByteArray())
                     outFile.writeInt(blockHeaderAtOffset.blockLength)
                 }

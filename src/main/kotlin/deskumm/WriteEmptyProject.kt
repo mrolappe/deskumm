@@ -29,12 +29,12 @@ fun writeDummyLecfFileForRoom(path: Path) {
     DataOutputStream(XorOutputStream(FileOutputStream(path.toFile()))).use { out ->
         lecfBlock.writeTo(out)
 
-        FileInputStream(Paths.get("data/ROOM/mi2_4_142076.ROOM").toFile()).use { it.copyTo(out) }
+        FileInputStream(Paths.get("data/ROOM/some.ROOM").toFile()).use { it.copyTo(out) }
     }
 }
 
 fun bannerBytes(count: Int): ByteArray {
-    return ByteArray(count, { i -> i.toByte() })
+    return ByteArray(count, { i -> ' '.toByte() })
 }
 
 object CursonOnEmit {
@@ -76,13 +76,6 @@ class CursorSetCharsetInstr(val charset: Int) {
     fun bytes(): ByteArray = byteArrayOf(0x2c, 13, charset.toByte())
 }
 
-class CurrentRoom(val room: Int) {
-    init {
-        require(room in 1..<256) { "Illegal room: $room" }
-    }
-
-    fun bytes(): ByteArray = byteArrayOf(0x72, room.toByte())
-}
 
 fun writeDummyLecfFileForScript(path: Path) {
 //    val scrpBlock = readScrpBlock(Paths.get("data/SCRP/1.SCRP"))
@@ -93,17 +86,10 @@ fun writeDummyLecfFileForScript(path: Path) {
 
         val byteStream = ByteArrayOutputStream()
 
-        val drawBoxBytes = DrawBoxInstr(
-            ImmediateWordParam(10),
-            ImmediateWordParam(10),
-            ImmediateWordParam(150),
-            ImmediateWordParam(300),
-            ImmediateByteParam(2)
-        ).emitBytes()
-        println("draw box bytes: ${drawBoxBytes.contentToString()}")
-        byteStream.write(drawBoxBytes)
+        emitBytesForBannerColorString(byteStream)
 
-        byteStream.write(CurrentRoom(2).bytes())
+        byteStream.write(CurrentRoomInstr(ImmediateByteParam(2)).emitBytes())
+
         byteStream.write(byteArrayOf(0x02, 0x00))   // start-music 0
         byteStream.write(CursonOnEmit.bytes())
         byteStream.write(CursorSoftOnEmit.bytes())
@@ -117,17 +103,6 @@ fun writeDummyLecfFileForScript(path: Path) {
         byteStream.write(byteArrayOf(0x27, 1, 6) + "string 6".toByteArray())
         byteStream.write(0)
 
-//        byteStream.write(byteArrayOf(0x27, 1, 21) + bannerBytes(32))      // str21 = banner color bytes
-        byteStream.write(byteArrayOf(0x27, 5, 21, 32))      // dim str21[32]; str21[:] = 0
-        byteStream.write(byteArrayOf(0x27, 3, 21, 25, 4))    // str21[25] = ?
-        byteStream.write(byteArrayOf(0x27, 3, 21, 26, 1))    // str21[26] = ?
-        byteStream.write(byteArrayOf(0x27, 3, 21, 27, 5))
-        byteStream.write(byteArrayOf(0x27, 3, 21, 28, 2))
-        byteStream.write(byteArrayOf(0x27, 3, 21, 29, 5))
-        byteStream.write(byteArrayOf(0x27, 3, 21, 30, 2))
-
-        // print 252 text "Hard disk"
-        byteStream.write(byteArrayOf(0x14, 0xfc.toByte(),0x0f, 0x48, 0x61, 0x72, 0x64, 0x20, 0x64, 0x69, 0x73, 0x6b, 0x00))
         byteStream.write(byteArrayOf(0x14, 0xfc.toByte(), 0x01, 0x09, 0xff.toByte()))   // print 252 color 9
 
         // print 255 color 15 at 160, 8 center overhead
@@ -146,12 +121,49 @@ fun writeDummyLecfFileForScript(path: Path) {
             )
         )
 
+        // print 252 text "Hard disk"
+        byteStream.write(byteArrayOf(0x14, 0xfc.toByte(),0x0f, 0x48, 0x61, 0x72, 0x64, 0x20, 0x64, 0x69, 0x73, 0x6b, 0x00))
+
+        val drawBoxBytes = DrawBoxInstr(
+            ImmediateWordParam(10),
+            ImmediateWordParam(10),
+            ImmediateWordParam(150),
+            ImmediateWordParam(300),
+            ImmediateByteParam(2)
+        ).emitBytes()
         byteStream.write(drawBoxBytes)
 
-//        byteStream.write(0xa0)      // end script
+        // say-line text "..."
+        byteStream.write(byteArrayOf(0xd8.toByte(), 0xf) + "tach!".toByteArray() + byteArrayOf(0x00))
+
+        // wait-for-message
+        byteStream.write(byteArrayOf(0xae.toByte(), 0x02))
+
+        byteStream.write(0xa0)      // end script
         val scrpBlock = ScrpBlock(byteStream.toByteArray())
         scrpBlock?.writeTo(out)
     }
+}
+
+private fun emitBytesForBannerColorString(byteStream: ByteArrayOutputStream) {
+//    byteStream.write(byteArrayOf(0x27, 1, 21) + bannerBytes(32))      // str21 = banner color bytes
+
+    byteStream.write(byteArrayOf(0x27, 5, 21, 32))      // dim str21[32]; str21[:] = 0
+
+    val colors = listOf(5, 2, 4)
+
+   // str21[i] = 3
+    for (i in 0..42) {
+        byteStream.write(byteArrayOf(0x27, 3, 21, i.toByte(), colors[i % 3].toByte()))
+    }
+/*
+    byteStream.write(byteArrayOf(0x27, 3, 21, 25, 4))    // str21[25] = ?
+    byteStream.write(byteArrayOf(0x27, 3, 21, 26, 1))    // str21[26] = ?
+    byteStream.write(byteArrayOf(0x27, 3, 21, 27, 5))
+    byteStream.write(byteArrayOf(0x27, 3, 21, 28, 2))
+    byteStream.write(byteArrayOf(0x27, 3, 21, 29, 5))
+    byteStream.write(byteArrayOf(0x27, 3, 21, 30, 2))
+*/
 }
 
 data class RoomAndOffset(val room: Int, val offset: Int) {
