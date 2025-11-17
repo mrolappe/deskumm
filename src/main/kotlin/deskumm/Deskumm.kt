@@ -342,6 +342,14 @@ class ActorInstr(val actorParam: ByteParam, val subs: List<Sub>) : Instruction {
             get() = "costume ${costumeParam.toSource()}"
     }
 
+    // 0x2
+    class StepDist(val xParam: ByteParam, val yParam: ByteParam) : Sub {
+        override val byteSize: Int
+            get() = 1 + xParam.byteCount + yParam.byteCount
+        override val source: String
+            get() = "step-dist ${xParam.toSource()}, ${yParam.toSource()}"
+    }
+
     // 0x04
     class WalkAnimation(val animationParam: ByteParam) : Sub {
         override val byteSize: Int
@@ -380,6 +388,14 @@ class ActorInstr(val actorParam: ByteParam, val subs: List<Sub>) : Instruction {
             get() = 1 /* opcode */ + name.byteCount
         override val source: String
             get() = "actor-name \"${name.toSource()}\""
+    }
+
+    // 0x13
+    class AlwaysZClip(val someParam: ByteParam) : Sub {
+        override val byteSize: Int
+            get() = 1 + someParam.byteCount
+        override val source: String
+            get() = "always-zclip ${someParam.toSource()}"
     }
 
     // 0x14
@@ -501,6 +517,13 @@ class PrintInstr(val who: ByteParam, val subs: List<Sub>) : Instruction {
         override val source: String
             get() = "!invalid 0x$opcode (0x${opcode.and(0xf)})!"
     }
+}
+
+// 0x16/0x96
+class AssignRandomInstr(val resultVar: ResultVar, val maxParam: ByteParam) : Instruction {
+    override fun toSource(): String = "${resultVar.toSource()} := random ${maxParam.toSource()}"
+    override val length: Int
+        get() = 1 + resultVar.byteCount + maxParam.byteCount
 }
 
 // 0x18
@@ -778,6 +801,14 @@ class AssignProximityInstr(val resultVar: ResultVar, val object1Param: WordParam
     override fun toSource(): String = "${resultVar.toSource()} := proximity ${object1Param.toSource()}, ${object2Param.toSource()}"
     override val length: Int
         get() = 1 + resultVar.byteCount + object1Param.byteCount + object2Param.byteCount
+}
+
+// 0x35/0x75/0xb5/0xf5
+class AssignFindObjectInstr(val resultVar: ResultVar, val xParam: ByteParam, val yParam: ByteParam) : Instruction {
+    override fun toSource(): String = "${resultVar.toSource()} := find-object ${xParam.toSource()}, ${yParam.toSource()}"
+
+    override val length: Int
+        get() = 1 + resultVar.byteCount + xParam.byteCount + yParam.byteCount
 }
 
 // 0x36/0x76/0xb6/0xf6
@@ -1259,7 +1290,7 @@ class SayLineInstr(val subs: List<PrintInstr.Sub>) : Instruction {
 
 class ExpressionInstr(val resultVar: ResultVar, val subs: List<Sub>) : Instruction {
     override fun toSource(): String {
-        return "TODO expression; ${resultVar.toSource()} = ${subs.joinToString(" ") { it.toSource() }}"
+        return "${resultVar.toSource()} = ${subs.joinToString(" ") { it.toSource() }}"
     }
 
     override val length: Int
@@ -1275,8 +1306,7 @@ class ExpressionInstr(val resultVar: ResultVar, val subs: List<Sub>) : Instructi
         override val byteCount: Int
             get() = 1 + valueParam.byteCount
 
-        override fun toSource(): String = valueParam.toSource()
-
+        override fun toSource(): String = "push ${valueParam.toSource()}"
     }
 
     // 0x2
@@ -1312,11 +1342,11 @@ class ExpressionInstr(val resultVar: ResultVar, val subs: List<Sub>) : Instructi
     }
 
     // 0x6
-    class Op(val op: ByteArray) : Sub {
+    class Op(val op: Instruction) : Sub {
         override val byteCount: Int
-            get() = 1
+            get() = 1 + op.length
 
-        override fun toSource(): String = "TODO expression op"
+        override fun toSource(): String = "op(${op.toSource()})"
     }
 
 
@@ -1735,13 +1765,11 @@ fun decompileInstruction(bytes: ByteArray, offset: Int): Instruction? {
             while (opcode2 != 0xff) {
                 val sub = when (opcode2.and(0x1f)) {
                     1 -> ActorInstr.Costume(readByteParam(data, opcode2, 0x80))
-/*
                     2 -> {
                         val xParam = readByteParam(data, opcode2, 0x80)
                         val yParam = readByteParam(data, opcode2, 0x40)
                         ActorInstr.StepDist(xParam, yParam)
                     }
-*/
 //                    3 -> ActorInstr.Sound(readByteParam(data, opcode2, 0x80))
                     4 -> ActorInstr.WalkAnimation(readByteParam(data, opcode2, 0x80))
                     5 -> ActorInstr.TalkAnimation(readByteParam(data, opcode2, 0x80), readByteParam(data, opcode2, 0x40))
@@ -1763,7 +1791,7 @@ fun decompileInstruction(bytes: ByteArray, offset: Int): Instruction? {
 //                    16 -> ActorInstr.Width(readByteParam(data, opcode2, 0x80))
 //                    17 -> ActorInstr.Scale(readByteParam(data, opcode2, 0x80), readByteParam(data, opcode2, 0x40))
 //                    18 -> ActorInstr.NeverZClip
-//                    19 -> ActorInstr.AlwaysZClip(readByteParam(data, opcode2, 0x80))
+                    19 -> ActorInstr.AlwaysZClip(readByteParam(data, opcode2, 0x80))
                     20 -> ActorInstr.IgnoreBoxes
 //                    21 -> ActorInstr.FollowBoxes
 //                    22 -> ActorInstr.AnimationSpeed(readByteParam(data, opcode2, 0x80))
@@ -1785,6 +1813,13 @@ fun decompileInstruction(bytes: ByteArray, offset: Int): Instruction? {
             val subs = decodePrintSubs(data)
 
             PrintInstr(who, subs)
+        }
+
+        0x16, 0x96 -> {
+            val resultVar = readResultVar(data)
+            val maxParam = readByteParam(data, opcode, 0x80)
+
+            AssignRandomInstr(resultVar, maxParam)
         }
 
         0x18 -> JumpInstr(data.readShortLittleEndian().toInt())
@@ -1956,6 +1991,14 @@ fun decompileInstruction(bytes: ByteArray, offset: Int): Instruction? {
             val object2Param = readWordParam(data, opcode, 0x40)
 
             AssignProximityInstr(resultVar, object1Param, object2Param)
+        }
+
+        0x35, 0x75, 0xb5, 0xf5 -> {
+            val resultVar = readResultVar(data)
+            val xParam = readByteParam(data, opcode, 0x80)
+            val yParam = readByteParam(data, opcode, 0x40)
+
+            AssignFindObjectInstr(resultVar, xParam, yParam)
         }
 
         0x36, 0x76, 0xb6, 0xf6 -> {
@@ -2199,22 +2242,28 @@ fun decompileInstruction(bytes: ByteArray, offset: Int): Instruction? {
             val resultVar = readResultVar(data)
             var opcode = data.readUnsignedByte()
 
-            val subs = buildList {
-                while (opcode != 0xff) {
-                    val sub = when (opcode.and(0x1f)) {
-                        1 -> ExpressionInstr.Value(readWordParam(data, opcode, 0x80))
-                        2 -> ExpressionInstr.Add
-                        3 -> ExpressionInstr.Subtract
-                        4 -> ExpressionInstr.Multiply
-                        5 -> ExpressionInstr.Divide
-                        6 -> ExpressionInstr.Op(byteArrayOf(data.readUnsignedByte().toByte()))  // TODO
-                        else -> ExpressionInstr.Invalid(byteArrayOf(opcode.toByte()))
+            val subs = mutableListOf<ExpressionInstr.Sub>()
+
+            while (opcode != 0xff) {
+                val sub = when (opcode.and(0x1f)) {
+                    1 -> ExpressionInstr.Value(readWordParam(data, opcode, 0x80))
+                    2 -> ExpressionInstr.Add
+                    3 -> ExpressionInstr.Subtract
+                    4 -> ExpressionInstr.Multiply
+                    5 -> ExpressionInstr.Divide
+                    6 -> {
+                        val opOffset = 2 /* opcode 0xac 0x6 */ + offset + resultVar.byteCount + subs.sumOf { it.byteCount }
+                        val decompiledOp = decompileInstruction(bytes, opOffset)!!
+                        repeat(decompiledOp.length) { data.readUnsignedByte() }     // TODO find a more elegant way
+                        ExpressionInstr.Op(decompiledOp)
                     }
 
-                    add(sub)
-
-                    opcode = data.readUnsignedByte()
+                    else -> ExpressionInstr.Invalid(byteArrayOf(opcode.toByte()))
                 }
+
+                subs.add(sub)
+
+                opcode = data.readUnsignedByte()
             }
 
             ExpressionInstr(resultVar, subs)

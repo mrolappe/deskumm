@@ -38,6 +38,8 @@ class ExtractFromLecfCommand : CliktCommand() {
             println("$blockHeaderAtOffset, ok: ${blockId == blockHeaderAtOffset.blockId}")
 
             RandomAccessFile(outFile ?: File("extract.out"), "rw").use { outFile ->
+                outFile.setLength(0)
+
                 if (withBlockHeader) {
                     outFile.write(blockHeaderAtOffset.blockId.name.toByteArray())
                     outFile.writeInt(blockHeaderAtOffset.blockLength)

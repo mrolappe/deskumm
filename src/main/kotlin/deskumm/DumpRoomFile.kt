@@ -133,7 +133,7 @@ class ScummDataFileV5(val file: RandomAccessFile, val xorCode: Byte = 0x69) : Cl
     fun expectAndSeekToEndOfBlock(blockId: RoomFileBlockId) {
         val blockStart = file.filePointer
         val blockHeader = readBlockHeader()
-        println(blockHeader)
+//        println(blockHeader)
         blockHeader.expectBlockId(blockId)
         file.seek(blockStart + blockHeader.blockLength.value)
     }
@@ -219,7 +219,7 @@ class DumpRoomFileCommand : CliktCommand() {
             blockHeader.expectBlockId(RoomFileBlockId.ROOM)
 
             val roomHeaderBlock = file.readRoomHeaderBlock()
-            println(roomHeaderBlock)
+//            println(roomHeaderBlock)
 
             file.expectAndSeekToEndOfBlock(RoomFileBlockId.CYCL)
             file.expectAndSeekToEndOfBlock(RoomFileBlockId.TRNS)
@@ -237,6 +237,7 @@ class DumpRoomFileCommand : CliktCommand() {
             var numberOfLocalScripts = 0
 
             while (file.file.filePointer < file.file.length()) {
+                println("before peek, file pointer: ${file.file.filePointer}, file length: ${file.file.length()}")
                 when (file.peekBlockId()) {
                     RoomFileBlockId.OBCD -> processObjectCode(
                         file,

@@ -94,8 +94,8 @@ fun writeDummyLecfFileForScript(path: Path) {
         byteStream.write(CursonOnEmit.bytes())
         byteStream.write(CursorSoftOnEmit.bytes())
 
-        byteStream.write(CursorSetCharsetInstr(2).bytes())
         byteStream.write(LoadCharsetInstrEmit(2).bytes())
+        byteStream.write(CursorSetCharsetInstr(2).bytes())
 
         byteStream.write(byteArrayOf(0x27, 1, 5) + "neu starten?0".toByteArray())
         byteStream.write(0)
