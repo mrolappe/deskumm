@@ -29,7 +29,7 @@ fun writeDummyLecfFileForRoom(path: Path) {
     DataOutputStream(XorOutputStream(FileOutputStream(path.toFile()))).use { out ->
         lecfBlock.writeTo(out)
 
-        FileInputStream(Paths.get("data/ROOM/some.ROOM").toFile()).use { it.copyTo(out) }
+        FileInputStream(Paths.get("data/ROOM/mi2_8_591781.ROOM").toFile()).use { it.copyTo(out) }
     }
 }
 

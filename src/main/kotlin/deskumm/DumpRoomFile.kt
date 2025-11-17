@@ -237,7 +237,6 @@ class DumpRoomFileCommand : CliktCommand() {
             var numberOfLocalScripts = 0
 
             while (file.file.filePointer < file.file.length()) {
-                println("before peek, file pointer: ${file.file.filePointer}, file length: ${file.file.length()}")
                 when (file.peekBlockId()) {
                     RoomFileBlockId.OBCD -> processObjectCode(
                         file,

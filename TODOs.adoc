@@ -3,3 +3,5 @@
 
 - scumm string parsing
 - verify logic of jump-if opcodes
+
+- query functionality; which scripts/actors/... are referenced/used where?

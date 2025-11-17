@@ -210,7 +210,7 @@ class NukeRoomInstr(val roomParam: ByteParam) : Instruction {
 
 // 0x0c09
 class LockScriptInstr(val scriptParam: ByteParam) : Instruction {
-    override fun toSource(): String = "lock-script $scriptParam"
+    override fun toSource(): String = "lock-script ${scriptParam.toSource()}"
     override val length: Int
         get() = 2 + scriptParam.byteCount
 }
@@ -390,6 +390,14 @@ class ActorInstr(val actorParam: ByteParam, val subs: List<Sub>) : Instruction {
             get() = "actor-name \"${name.toSource()}\""
     }
 
+    // 0x12
+    object NeverZClip : Sub {
+        override val byteSize: Int
+            get() = 1
+        override val source: String
+            get() = "never-zclip"
+    }
+
     // 0x13
     class AlwaysZClip(val someParam: ByteParam) : Sub {
         override val byteSize: Int
@@ -552,6 +560,13 @@ object StopSentenceScriptInstr : Instruction {
 // 0x20
 object StopMusicOpcode : Opcode("stop-music", 1)
 
+// 0x24, 0x64, 0xa4, 0xe4
+class ComeOutInRoomInstr(val objectParam: WordParam, val roomParam: ByteParam, val x: Int, val y: Int) : Instruction {
+    override fun toSource(): String = "come-out ${objectParam.toSource()} in-room ${roomParam.toSource()} walk-to $x, $y"
+    override val length: Int
+        get() = 1 + objectParam.byteCount + roomParam.byteCount + 4 /* x and y */
+}
+
 // 0x25, 0x65, 0xa5, 0xe5
 class PickUpObjectInstr(val objectParam: WordParam, val roomParam: ByteParam) : Instruction {
     override fun toSource(): String = "pick-up-object ${objectParam.toSource()} in-room ${roomParam.toSource()}"
@@ -629,6 +644,13 @@ class OwnerOfIsInstr(val objectParam: WordParam, val ownerParam: ByteParam) : In
 
     override val length: Int
         get() = 1 + objectParam.byteCount + ownerParam.byteCount
+}
+
+// 0x2b
+class SleepForVarJiffiesInstr(val jiffiesVar: VarSpec) : Instruction {
+    override fun toSource(): String = "sleep-for ${jiffiesVar.toSourceName()} jiffies"
+    override val length: Int
+        get() = 1 + jiffiesVar.byteCount
 }
 
 // 0x2d/0x6d/0xad/0xed
@@ -1210,8 +1232,19 @@ class VerbInstr(val verbParam: ByteParam, val subs: List<Sub>) : Instruction {
     }
 }
 
-object BreakHereInstr : Opcode("break-here", 1)
-object EndScriptInstr : Opcode("end-script", 1)
+abstract class SimpleInstr(val name: String, override val length: Int) : Instruction {
+    override fun toSource(): String = name
+}
+
+// 0x98 0x01
+object RestartInstr : SimpleInstr("restart", 2)
+// 0x98 0x02
+object PauseInstr : SimpleInstr("pause", 2)
+// 0x98 0x03
+object QuitInstr : SimpleInstr("quit", 2)
+
+object BreakHereInstr : SimpleInstr("break-here", 1)
+object EndScriptInstr : SimpleInstr("end-script", 1)
 
 // 0xa8 if (@var)
 class JumpIfVarZeroInst(val varSpec: VarSpec, val skipOffset: Int) : Instruction {
@@ -1790,7 +1823,7 @@ fun decompileInstruction(bytes: ByteArray, offset: Int): Instruction? {
 //                    14 -> ActorInstr.InitAnimation(readByteParam(data, opcode2, 0x80))
 //                    16 -> ActorInstr.Width(readByteParam(data, opcode2, 0x80))
 //                    17 -> ActorInstr.Scale(readByteParam(data, opcode2, 0x80), readByteParam(data, opcode2, 0x40))
-//                    18 -> ActorInstr.NeverZClip
+                    18 -> ActorInstr.NeverZClip
                     19 -> ActorInstr.AlwaysZClip(readByteParam(data, opcode2, 0x80))
                     20 -> ActorInstr.IgnoreBoxes
 //                    21 -> ActorInstr.FollowBoxes
@@ -1873,6 +1906,15 @@ fun decompileInstruction(bytes: ByteArray, offset: Int): Instruction? {
 
         0x20 -> StopMusicOpcode
 
+        0x24, 0x64, 0xa4, 0xe4 -> {
+            val objectParam = readWordParam(data, opcode, 0x80)
+            val roomParam = readByteParam(data, opcode, 0x40)
+            val x = data.readShortLittleEndian().toInt()
+            val y = data.readShortLittleEndian().toInt()
+
+            ComeOutInRoomInstr(objectParam, roomParam, x, y)
+        }
+
         0x25, 0x65, 0xa5, 0xe5 -> {
             val objectParam = readWordParam(data, opcode, 0x80)
             val roomParam = readByteParam(data, opcode, 0x40)
@@ -1894,6 +1936,11 @@ fun decompileInstruction(bytes: ByteArray, offset: Int): Instruction? {
             val ownerParam = readByteParam(data, opcode, 0x40)
 
             OwnerOfIsInstr(objectParam, ownerParam)
+        }
+
+        0x2b -> {
+            val varSpec = toVarSpec(data.readShortLittleEndian().toInt())
+            SleepForVarJiffiesInstr(varSpec)
         }
 
         0x2c -> decompileCursorInstruction(bytes, offset)
@@ -2215,6 +2262,16 @@ fun decompileInstruction(bytes: ByteArray, offset: Int): Instruction? {
         }
 
         0x80 -> BreakHereInstr
+
+        0x98 -> {
+            return when (val opcode2 = data.readUnsignedByte()) {
+                1 -> RestartInstr
+                2 -> PauseInstr
+                3 -> QuitInstr
+                else -> InvalidInstruction(byteArrayOf(opcode.toByte(), opcode2.toByte()))
+            }
+        }
+
         0xa0 -> EndScriptInstr
 
         0xa8 -> {
