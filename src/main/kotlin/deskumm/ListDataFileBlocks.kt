@@ -87,10 +87,10 @@ fun listDataFileBlocks(dataFile: RandomAccessFile) {
             println("@$absoluteOffsetOfBlock: ${blockHeader.blockId}, len: ${blockHeader.blockLength} (end: ${absoluteOffsetOfBlock + blockHeader.blockLength})")
 
             if (blockHeader.blockId == DataFileBlockId.LOFF) {
-                val numRooms = dataFile.readXorEncoded()
+                val numRooms = dataFile.readXorEncoded(0x69)
                 println("loff, numRooms: $numRooms")
                 for (i in 0 until numRooms) {
-                    val room = dataFile.readXorEncoded()
+                    val room = dataFile.readXorEncoded(0x69)
                     val offset = dataFile.readIntLittleEndianXorEncoded()
                     println("room: $room, offset: $offset")
                 }
@@ -124,19 +124,19 @@ fun DataInput.readBlockHeader(): DataFileBlockHeader {
 
 fun DataInput.readBlockId(): DataFileBlockId {
     val idBytes = ByteArray(4)
-    readXorEncoded(idBytes, 0, 4)
+    readXorEncoded(idBytes, 0, 4, 0x69)
     return DataFileBlockId.valueOf(String(idBytes))
 }
 
-fun DataInput.readXorEncoded(code: Byte = 0x69): Byte {
-    return readByte().xor(code)
+fun DataInput.readXorEncoded(code: Byte): Byte {
+    return readUnsignedByte().xor(code.toInt()).toByte()
 }
 
 fun DataInput.readXorEncoded(buffer: ByteArray, code: Byte) {
    readXorEncoded(buffer, 0, buffer.size, code)
 }
 
-fun DataInput.readXorEncoded(buffer: ByteArray, offset: Int, length: Int, code: Byte = 0x69) {
+fun DataInput.readXorEncoded(buffer: ByteArray, offset: Int, length: Int, code: Byte) {
     readFully(buffer, offset, length)
 
     buffer.sliceArray(0..< length).mapIndexed { index, byte -> buffer[index] = byte.xor(code) }

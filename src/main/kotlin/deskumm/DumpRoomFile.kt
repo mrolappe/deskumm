@@ -7,11 +7,17 @@ import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.types.boolean
 import com.github.ajalt.clikt.parameters.types.file
+import io.github.oshai.kotlinlogging.KotlinLogging
 import java.io.Closeable
 import java.io.DataInput
+import java.io.DataOutput
+import java.io.DataOutputStream
 import java.io.File
+import java.io.FileOutputStream
 import java.io.RandomAccessFile
 import kotlin.experimental.xor
+
+private val logger = KotlinLogging.logger {}
 
 fun main(args: Array<String>) = DumpRoomFileCommand().main(args)
 
@@ -24,6 +30,11 @@ enum class RoomFileBlockId(val id: String) {
     CYCL("CYCL"),
     EPAL("EPAL"),   // EGA palette
     ENCD("ENCD"),
+    IMHD("IMHD"),
+    IM00("IM00"),
+    IM01("IM01"),
+    IM02("IM02"),
+    IM03("IM03"),
     EXCD("EXCD"),
     LSCR("LSCR"),
     NLSC("NLSC"),
@@ -31,10 +42,14 @@ enum class RoomFileBlockId(val id: String) {
     OBIM("OBIM"),
     ROOM("ROOM"),
     RMHD("RMHD"),
+    RMIH("RMIH"),
     RMIM("RMIM"),
     SCAL("SCAL"),
     SCRP("SCRP"),
+    SMAP("SMAP"),
     TRNS("TRNS"),
+    ZP01("ZP01"),
+    ZP02("ZP02"),
     ;
 
     init {
@@ -89,17 +104,9 @@ data class LocalScriptBlockV5(val scriptId: Int, val scriptBytes: ScriptBytesV5)
 }
 
 class ScummDataFileV5(val file: RandomAccessFile, val xorCode: Byte = 0x69) : Closeable {
-    val xorInt = xorCode.toInt().shl(24)
-        .or(xorCode.toInt().shl(16))
-        .or(xorCode.toInt().shl(8))
-        .or(xorCode.toInt())
+    val xorInt = xorInt(xorCode)
 
-    fun readBlockId4(): BlockId4 {
-        val idBytes = ByteArray(4)
-        file.readFully(idBytes)
-        idBytes.sliceArray(0..< 4).mapIndexed { index, byte -> idBytes[index] = byte.xor(xorCode) }
-        return BlockId4(idBytes)
-    }
+    fun readBlockId4(): BlockId4 = BlockId4.readFrom(file, xorCode)
 
     override fun close() {
         file.close()
@@ -168,7 +175,9 @@ class ScummDataFileV5(val file: RandomAccessFile, val xorCode: Byte = 0x69) : Cl
         val blockStart = file.filePointer
         val blockId4 = readBlockId4()
         file.seek(blockStart)
-        return RoomFileBlockId.from(blockId4)
+        val blockId = RoomFileBlockId.from(blockId4)
+        logger.trace { "peeked block ID $blockId" }
+        return blockId
     }
 
     fun readLocalScriptBlock(): LocalScriptBlockV5 {
@@ -181,19 +190,49 @@ class ScummDataFileV5(val file: RandomAccessFile, val xorCode: Byte = 0x69) : Cl
     }
 }
 
-data class RoomHeaderBlockV5(val width: UInt, val height: UInt, val objectCount: UInt) {
+fun xorInt(xorCode: Byte): Int = xorCode.toInt().shl(24)
+    .or(xorCode.toInt().shl(16))
+    .or(xorCode.toInt().shl(8))
+    .or(xorCode.toInt())
+
+interface BlockV5 {
+    fun writeTo(out: DataOutput)
+
+    val blockId: BlockId4
+    val blockLength: BlockLengthV5
+
+    val headerLength: Int
+        get() = BlockHeaderV5.BLOCK_HEADER_BYTE_COUNT
+}
+
+data class RoomHeaderBlockV5(val width: Int, val height: Int, val objectCount: Int) : BlockV5 {
     companion object {
         fun readDataFrom(data: DataInput): RoomHeaderBlockV5 {
-            val width = data.readShortLittleEndian().toUInt()
-            val height = data.readShortLittleEndian().toUInt()
-            val objectCount = data.readShortLittleEndian().toUInt()
+            val width = data.readShortLittleEndian().toInt()
+            val height = data.readShortLittleEndian().toInt()
+            val objectCount = data.readShortLittleEndian().toInt()
 
             return RoomHeaderBlockV5(width, height, objectCount)
         }
     }
+
+    override fun writeTo(out: DataOutput) {
+        writeBlockHeader(out, BlockId4("RMHD"), 6)
+        out.writeShortLittleEndian(width.toShort())
+        out.writeShortLittleEndian(height.toShort())
+        out.writeShortLittleEndian(objectCount.toShort())
+    }
+
+    override val blockId: BlockId4
+        get() = BlockId4("RMHD")
+
+    override val blockLength: BlockLengthV5
+        get() = BlockLengthV5(8 /* header */ + 6 /* data */)
 }
 
 fun BlockHeaderV5.expectBlockId(expectedBlockId: RoomFileBlockId) {
+    logger.debug { "expecting block ID $expectedBlockId, got $blockId" }
+
     if (!expectedBlockId.matches(blockId)) {
         throw IllegalArgumentException("Expected block ID $expectedBlockId, but got ${blockId.asString()}")
     }
@@ -206,6 +245,7 @@ class DumpRoomFileCommand : CliktCommand() {
     val dumpExitCode by option("--dump-exit-code").boolean().default(false)
     val dumpObjectCode by option("--dump-object-code").boolean().default(false)
     val dumpLocalScripts by option("--dump-local-scripts").boolean().default(false)
+    val extractRoomImage by option("--extract-room-image").boolean().default(false)
 
     override fun run() {
         dumpRoomFile(roomFile, encoded)
@@ -228,15 +268,17 @@ class DumpRoomFileCommand : CliktCommand() {
             file.expectAndSeekToEndOfBlock(RoomFileBlockId.BOXM)
             file.expectAndSeekToEndOfBlock(RoomFileBlockId.CLUT)
             file.expectAndSeekToEndOfBlock(RoomFileBlockId.SCAL)
-            file.expectAndSeekToEndOfBlock(RoomFileBlockId.RMIM)
 
-            repeat(roomHeaderBlock.objectCount.toInt()) {
-                file.expectAndSeekToEndOfBlock(RoomFileBlockId.OBIM)
-            }
+            dumpRoomImage(file, roomHeaderBlock.objectCount)
+
+//            repeat(roomHeaderBlock.objectCount.toInt()) {
+//                file.expectAndSeekToEndOfBlock(RoomFileBlockId.OBIM)
+//            }
 
             var numberOfLocalScripts = 0
 
             while (file.file.filePointer < file.file.length()) {
+                logger.debug { "file pointer: ${file.file.filePointer}, length: ${file.file.length()}" }
                 when (file.peekBlockId()) {
                     RoomFileBlockId.OBCD -> processObjectCode(
                         file,
@@ -259,6 +301,58 @@ class DumpRoomFileCommand : CliktCommand() {
 
 
             println("file length: ${file.file.length()}, file pointer: ${file.file.filePointer}")
+        }
+    }
+
+    private fun dumpRoomImage(file: ScummDataFileV5, objectCount: Int) {
+        val rmimHeader = file.expectBlockHeaderWithId(RoomFileBlockId.RMIM)
+
+        if (extractRoomImage) {
+            DataOutputStream(FileOutputStream("TODO.RMIM")).use { out ->
+                rmimHeader.writeTo(out)
+                val rmimBytes = ByteArray(rmimHeader.contentLength.value)
+                file.file.readFully(rmimBytes)
+                out.write(rmimBytes)
+            }
+        } else {
+            file.expectBlockHeaderWithId(RoomFileBlockId.RMIH)
+
+            val numZBuffers = file.file.readShortLittleEndian().toInt()
+            logger.debug { "# zBuffers: $numZBuffers" }
+            file.expectBlockHeaderWithId(RoomFileBlockId.IM00)
+            file.expectAndSeekToEndOfBlock(RoomFileBlockId.SMAP)
+
+            if (file.peekBlockId() == RoomFileBlockId.ZP01) {
+                file.expectAndSeekToEndOfBlock(RoomFileBlockId.ZP01)
+            }
+
+            if (file.peekBlockId() == RoomFileBlockId.ZP02) {
+                file.expectAndSeekToEndOfBlock(RoomFileBlockId.ZP02)
+            }
+        }
+
+
+        repeat(objectCount) {
+            file.expectBlockHeaderWithId(RoomFileBlockId.OBIM)
+            file.expectAndSeekToEndOfBlock(RoomFileBlockId.IMHD)
+
+            val peekBlockId = file.peekBlockId()
+            println("peek block id: $peekBlockId")
+            skipBlocksWithId(file, RoomFileBlockId.IM00, RoomFileBlockId.IM01, RoomFileBlockId.IM02, RoomFileBlockId.IM03)
+            when(peekBlockId) {
+                else -> {}
+            }
+        }
+    }
+
+    private fun skipBlocksWithId(
+        file: ScummDataFileV5,
+        vararg blockId: RoomFileBlockId,
+    ) {
+        logger.debug { "skipping blocks with ids ${blockId.joinToString(", ") { it.id }}" }
+
+        while (file.peekBlockId() in blockId) {
+            file.expectAndSeekToEndOfBlock(file.peekBlockId())
         }
     }
 

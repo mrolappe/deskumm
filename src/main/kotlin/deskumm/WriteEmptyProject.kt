@@ -18,18 +18,25 @@ class WriteEmptyProjectCommand : CliktCommand() {
 //    writeEmptyDataFile(File("$baseName.001"))
 
         writeDummyLecfFileForCharset(Paths.get("$baseName.001"))
-        writeDummyLecfFileForRoom(Paths.get("$baseName.004"))
+        writeDummyLecfFileForRoomAndScript(Paths.get("$baseName.004"))
         writeDummyLecfFileForScript(Paths.get("$baseName.005"))
     }
 }
 
-fun writeDummyLecfFileForRoom(path: Path) {
-    val lecfBlock = LecfBlock(listOf(RoomAndOffset(2, 22)))
+fun writeDummyLecfFileForRoomAndScript(path: Path) {
+    val lecfBlock = LecfBlock(listOf(RoomAndOffset(1, 388)))
 
     DataOutputStream(XorOutputStream(FileOutputStream(path.toFile()))).use { out ->
         lecfBlock.writeTo(out)
 
-        FileInputStream(Paths.get("data/ROOM/mi2_8_591781.ROOM").toFile()).use { it.copyTo(out) }
+        val bytes = ByteArrayOutputStream()
+        DataOutputStream(bytes).use { emitDummyScriptBytes(it) }
+        val scrpBlock = ScrpBlockV5(bytes.toByteArray())
+        scrpBlock.writeTo(out)
+
+        FileInputStream(Paths.get("data/ROOM/mi2_7_397860.ROOM").toFile()).use { it.copyTo(out) }
+        FileInputStream(Paths.get("data/CHAR/2.CHAR").toFile()).use { it.copyTo(out) }
+
     }
 }
 
@@ -84,68 +91,124 @@ fun writeDummyLecfFileForScript(path: Path) {
     DataOutputStream(XorOutputStream(FileOutputStream(path.toFile()))).use { out ->
         lecfBlock.writeTo(out)
 
-        val byteStream = ByteArrayOutputStream()
-
-        emitBytesForBannerColorString(byteStream)
-
-        byteStream.write(CurrentRoomInstr(ImmediateByteParam(2)).emitBytes())
-
-        byteStream.write(byteArrayOf(0x02, 0x00))   // start-music 0
-        byteStream.write(CursonOnEmit.bytes())
-        byteStream.write(CursorSoftOnEmit.bytes())
-
-        byteStream.write(LoadCharsetInstrEmit(2).bytes())
-        byteStream.write(CursorSetCharsetInstr(2).bytes())
-
-        byteStream.write(byteArrayOf(0x27, 1, 5) + "neu starten?0".toByteArray())
-        byteStream.write(0)
-
-        byteStream.write(byteArrayOf(0x27, 1, 6) + "string 6".toByteArray())
-        byteStream.write(0)
-
-        byteStream.write(byteArrayOf(0x14, 0xfc.toByte(), 0x01, 0x09, 0xff.toByte()))   // print 252 color 9
-
-        // print 255 color 15 at 160, 8 center overhead
-        byteStream.write(byteArrayOf(0x14, 0xff.toByte(), 0x01, 0x0f, 0x00, 0xa0.toByte(), 0x00, 0x08, 0x00, 0x04, 0x07, 0xff.toByte()))
-        byteStream.write(byteArrayOf(0x14, 0xfc.toByte(), 0x01, 0x0c, 0x0f, 0x48, 0x61, 0x72, 0x64, 0x20, 0x64, 0x69, 0x73, 0x6b, 0))
-
-        byteStream.write(
-            byteArrayOf(
-                0x14.toByte(), 0xfc.toByte(),
-                0, 0x10, 0, 0x10, 0,    // at x, y
-                1, 3,   // color 3
-                4,  // center
-    //            0xfc.toByte(),
-                0xf, 'A'.toByte(), 'B'.toByte(), 'C'.toByte(), 'D'.toByte(), 0,
-//                0xff.toByte(),
-            )
-        )
-
-        // print 252 text "Hard disk"
-        byteStream.write(byteArrayOf(0x14, 0xfc.toByte(),0x0f, 0x48, 0x61, 0x72, 0x64, 0x20, 0x64, 0x69, 0x73, 0x6b, 0x00))
-
-        val drawBoxBytes = DrawBoxInstr(
-            ImmediateWordParam(10),
-            ImmediateWordParam(10),
-            ImmediateWordParam(150),
-            ImmediateWordParam(300),
-            ImmediateByteParam(2)
-        ).emitBytes()
-        byteStream.write(drawBoxBytes)
-
-        // say-line text "..."
-        byteStream.write(byteArrayOf(0xd8.toByte(), 0xf) + "tach!".toByteArray() + byteArrayOf(0x00))
-
-        // wait-for-message
-        byteStream.write(byteArrayOf(0xae.toByte(), 0x02))
-
-        byteStream.write(0xa0)      // end script
-        val scrpBlock = ScrpBlock(byteStream.toByteArray())
-        scrpBlock?.writeTo(out)
+        val bytes = ByteArrayOutputStream()
+        DataOutputStream(bytes).use { emitDummyScriptBytes(it) }
+        val scrpBlock = ScrpBlockV5(bytes.toByteArray())
+        scrpBlock.writeTo(out)
     }
 }
 
-private fun emitBytesForBannerColorString(byteStream: ByteArrayOutputStream) {
+fun emitDummyScriptBytes(dataOut: DataOutput) {
+    // set-screen 16 to 144
+    dataOut.write(byteArrayOf(0x33, 0x03))
+    ImmediateWordParam(16).emitBytes(dataOut)
+    ImmediateWordParam(144).emitBytes(dataOut)
+
+    val roomParam = ImmediateByteParam(1)
+    LockRoomInstr(roomParam).emitBytes(dataOut)
+    LoadRoomInstr(roomParam).emitBytes(dataOut)
+    CurrentRoomInstr(roomParam).emitBytes(dataOut)
+
+    // load-charset 1
+    dataOut.write(byteArrayOf(0x0c, 0x12))
+    ImmediateByteParam(1).emitBytes(dataOut)
+
+    // charset 1
+    dataOut.write(byteArrayOf(0x2c, 0xd))
+    ImmediateByteParam(1).emitBytes(dataOut)
+
+        emitBytesForBannerColorString(dataOut)
+
+//        dataOut.write(CursonOnEmit.bytes())
+//        dataOut.write(CursorSoftOnEmit.bytes())
+
+    StartMusicInstr(ImmediateByteParam(0)).emit(dataOut)
+
+    val drawBoxBytes = DrawBoxInstr(
+        ImmediateWordParam(10),
+        ImmediateWordParam(10),
+        ImmediateWordParam(150),
+        ImmediateWordParam(300),
+        ImmediateByteParam(2)
+    ).emitBytes()
+    dataOut.write(drawBoxBytes)
+
+    dataOut.write(
+        byteArrayOf(
+            0x14.toByte(), 0xfc.toByte(),
+            0, 0x10, 0, 0x10, 0,    // at x, y
+            1, 3,   // color 3
+            4,  // center
+            //            0xfc.toByte(),
+            0xf, 'A'.toByte(), 'B'.toByte(), 'C'.toByte(), 'D'.toByte(), 0,
+//                0xff.toByte(),
+        )
+    )
+
+    PutActorInRoomInstr(ImmediateByteParam(1), roomParam).emitBytes(dataOut)
+
+    EndScriptInstr.emit(dataOut)
+
+    dataOut.write(LoadCharsetInstrEmit(2).bytes())
+    dataOut.write(CursorSetCharsetInstr(2).bytes())
+
+    dataOut.write(byteArrayOf(0x27, 1, 5) + "neu starten?0".toByteArray())
+    dataOut.write(0)
+
+    dataOut.write(byteArrayOf(0x27, 1, 6) + "string 6".toByteArray())
+    dataOut.write(0)
+
+    // print 255 color 15 at 160, 8 center overhead
+    dataOut.write(
+        byteArrayOf(
+            0x14,
+            0xff.toByte(),
+            0x01,
+            0x0f,
+            0x00,
+            0xa0.toByte(),
+            0x00,
+            0x08,
+            0x00,
+            0x04,
+            0x07,
+            0xff.toByte()
+        )
+    )
+    dataOut.write(
+        byteArrayOf(
+            0x14,
+            0xfc.toByte(),
+            0x01,
+            0x0c,
+            0x0f,
+            0x48,
+            0x61,
+            0x72,
+            0x64,
+            0x20,
+            0x64,
+            0x69,
+            0x73,
+            0x6b,
+            0
+        )
+    )
+
+
+    // print 252 text "Hard disk"
+    dataOut.write(byteArrayOf(0x14, 0xfc.toByte(), 0x0f, 0x48, 0x61, 0x72, 0x64, 0x20, 0x64, 0x69, 0x73, 0x6b, 0x00))
+
+    // say-line text "..."
+    dataOut.write(byteArrayOf(0xd8.toByte(), 0xf) + "tach!".toByteArray() + byteArrayOf(0x00))
+
+    // wait-for-message
+    dataOut.write(byteArrayOf(0xae.toByte(), 0x02))
+
+    dataOut.write(0xa0)      // end script
+}
+
+private fun emitBytesForBannerColorString(byteStream: DataOutput) {
 //    byteStream.write(byteArrayOf(0x27, 1, 21) + bannerBytes(32))      // str21 = banner color bytes
 
     byteStream.write(byteArrayOf(0x27, 5, 21, 32))      // dim str21[32]; str21[:] = 0
@@ -246,7 +309,7 @@ data class CharBlock(val data: ByteArray) {
     }
 }
 
-data class ScrpBlock(val data: ByteArray) {
+data class ScrpBlockV5(val data: ByteArray) {
     fun writeTo(stream: DataOutputStream) {
         val blockId = BlockId4("SCRP")
         println("scrp block write, data size: ${data.size}")
@@ -255,7 +318,7 @@ data class ScrpBlock(val data: ByteArray) {
     }
 }
 
-fun readScrpBlock(path: Path): ScrpBlock? {
+fun readScrpBlock(path: Path): ScrpBlockV5? {
     return RandomAccessFile(path.toFile(), "r").use { file ->
         val blockId = BlockId4.readFrom(file)
 
@@ -267,7 +330,7 @@ fun readScrpBlock(path: Path): ScrpBlock? {
         println("scrp ($path) block length: $blockLength")
         val buffer = ByteArray(blockLength - 8)
         file.read(buffer)
-        ScrpBlock(buffer)
+        ScrpBlockV5(buffer)
     }
 }
 
@@ -342,8 +405,8 @@ private fun DataOutputStream.writeDummyDchrBlock() {
         // erster eintrag ist dummy
         DummyRoomNumberAndOffset,
 
-        RoomNumberAndOffset(1, 22),
-        RoomNumberAndOffset(7, 77)
+        RoomNumberAndOffset(2, 22),
+        RoomNumberAndOffset(1, 67293 - 22),
     )
 
     writeBlockId(DirectoryBlockId.DCHR)
@@ -387,9 +450,9 @@ fun DataOutputStream.writeDummyDrooBlock() {
 
     val entries = listOf(
         DummyRoomNumberAndOffset,
+        RoomNumberAndOffset(4, 22),
         RoomNumberAndOffset(1, 0),
-        RoomNumberAndOffset(4, 77),
-        RoomNumberAndOffset(5, 0),
+        RoomNumberAndOffset(4, 22),
         RoomNumberAndOffset(1, 0)
     )
 

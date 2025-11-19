@@ -77,6 +77,12 @@ class StartMusicInstr(val soundParam: ByteParam) : Instruction  {
 
     override val length: Int
         get() = 1 + soundParam.byteCount
+
+    fun emit(out: DataOutput) {
+        val opcode = if (soundParam.isImmediate) 0x02 else 0x82
+        out.writeByte(opcode)
+        soundParam.emitBytes(out)
+    }
 }
 
 // 0x03, 0x83
@@ -178,6 +184,16 @@ class LoadRoomInstr(val roomParam: ByteParam) : Instruction {
 
     override val length: Int
         get() = 2 + roomParam.byteCount
+
+    fun emitBytes(out: DataOutput) {
+        if (roomParam.isImmediate) {
+            out.write(byteArrayOf(0x0c, 0x04))
+            roomParam.emitBytes(out)
+        } else {
+            out.write(byteArrayOf(0x8c.toByte(), 0x04))
+            roomParam.emitBytes(out)
+        }
+    }
 }
 
 // 0x0c05
@@ -234,6 +250,16 @@ class LockRoomInstr(val roomParam: ByteParam) : Instruction {
     override fun toSource(): String = "lock-room ${roomParam.toSource()}"
     override val length: Int
         get() = 2 + roomParam.byteCount
+
+    fun emitBytes(out: DataOutput) {
+        if (roomParam.isImmediate) {
+            out.write(byteArrayOf(0x0c, 0x0c))
+            roomParam.emitBytes(out)
+        } else {
+            out.write(byteArrayOf(0x8c.toByte(), 0x0c))
+            roomParam.emitBytes(out)
+        }
+    }
 }
 
 // 0x0c0d
@@ -374,6 +400,13 @@ class ActorInstr(val actorParam: ByteParam, val subs: List<Sub>) : Instruction {
             get() = "default"
     }
 
+    // 0x9
+    class Elevation(val elevationParam: WordParam) : Sub {
+        override val byteSize: Int
+            get() = 1 + elevationParam.byteCount
+        override val source: String
+            get() = "elevation ${elevationParam.toSource()}"
+    }
     // 0xc
     class TalkColor(val colorParam: ByteParam) : Sub {
         override val byteSize: Int
@@ -440,6 +473,9 @@ class PrintInstr(val who: ByteParam, val subs: List<Sub>) : Instruction {
             return 2 /* opcode + who */ + additional + subs.sumOf { it.byteSize }
         }
 
+//    fun emitBytes(out: DataOutput) {
+//
+//    }
     sealed interface Sub {
         val byteSize: Int
         val source: String
@@ -560,6 +596,14 @@ object StopSentenceScriptInstr : Instruction {
 // 0x20
 object StopMusicOpcode : Opcode("stop-music", 1)
 
+// 0x23, 0xa3
+class AssignResultOfActorYInstr(val resultVar: ResultVar, val objectParam: WordParam) : Instruction {
+    override fun toSource(): String = "${resultVar.toSource()} := actor-y ${objectParam.toSource()}"
+
+    override val length: Int
+        get() = 1 + resultVar.byteCount + objectParam.byteCount
+}
+
 // 0x24, 0x64, 0xa4, 0xe4
 class ComeOutInRoomInstr(val objectParam: WordParam, val roomParam: ByteParam, val x: Int, val y: Int) : Instruction {
     override fun toSource(): String = "come-out ${objectParam.toSource()} in-room ${roomParam.toSource()} walk-to $x, $y"
@@ -659,6 +703,20 @@ class PutActorInRoomInstr(val actorParam: ByteParam, val roomParam: ByteParam) :
 
     override val length: Int
         get() = 1 + actorParam.byteCount + roomParam.byteCount
+
+    fun emitBytes(out: DataOutput) {
+        val opcode = when (Pair(actorParam.isVariable, roomParam.isVariable)) {
+            Pair(false, false) -> 0x2d
+            Pair(false, true) -> 0x6d
+            Pair(true, false) -> 0xad
+            Pair(true, true) -> 0xed
+            else -> error("!?#!")
+        }
+
+        out.writeByte(opcode)
+        actorParam.emitBytes(out)
+        roomParam.emitBytes(out)
+    }
 }
 
 // 0x2e
@@ -873,6 +931,13 @@ class SubtractInstr(val resultVar: ResultVar, val valueParam: WordParam) : Instr
         get() = 1 + resultVar.byteCount + valueParam.byteCount
 }
 
+// 0x3c, 0xbc
+class StopSoundInstr(val soundParam: ByteParam) : Instruction {
+    override fun toSource(): String = "stop-sound ${soundParam.toSource()}"
+    override val length: Int
+        get() = 1 + soundParam.byteCount
+}
+
 // 0x3d, 0x7d, 0xbd, 0xfd
 class AssignFindInventoryInstr(val resultVar: ResultVar, val xParam: ByteParam, val yParam: ByteParam) : Instruction {
     override fun toSource(): String = "${resultVar.toSource()} := find-inventory ${xParam.toSource()}, ${yParam.toSource()}"
@@ -1082,14 +1147,14 @@ class CurrentRoomInstr(val roomParam: ByteParam) : Instruction {
     override val length: Int
         get() = 1 + roomParam.byteCount
 
-    fun emit(out: DataOutput) {
+    fun emitBytes(out: DataOutput) {
         out.writeByte(0x72)
         roomParam.emitBytes(out)
     }
 
     fun emitBytes(): ByteArray {
         val baos = ByteArrayOutputStream()
-        DataOutputStream(baos).use { out -> emit(out) }
+        DataOutputStream(baos).use { out -> emitBytes(out) }
         return baos.toByteArray()
     }
 }
@@ -1232,19 +1297,25 @@ class VerbInstr(val verbParam: ByteParam, val subs: List<Sub>) : Instruction {
     }
 }
 
-abstract class SimpleInstr(val name: String, override val length: Int) : Instruction {
+abstract class SimpleInstr(val name: String, private val bytes: ByteArray) : Instruction {
     override fun toSource(): String = name
+    override val length: Int
+        get() = bytes.size
+
+    fun emit(out: DataOutput) {
+        out.write(bytes)
+    }
 }
 
 // 0x98 0x01
-object RestartInstr : SimpleInstr("restart", 2)
+object RestartInstr : SimpleInstr("restart", byteArrayOf(0x98.toByte(), 0x01))
 // 0x98 0x02
-object PauseInstr : SimpleInstr("pause", 2)
+object PauseInstr : SimpleInstr("pause", byteArrayOf(0x98.toByte(), 0x02))
 // 0x98 0x03
-object QuitInstr : SimpleInstr("quit", 2)
+object QuitInstr : SimpleInstr("quit", byteArrayOf(0x98.toByte(), 0x03))
 
-object BreakHereInstr : SimpleInstr("break-here", 1)
-object EndScriptInstr : SimpleInstr("end-script", 1)
+object BreakHereInstr : SimpleInstr("break-here", byteArrayOf(0x80.toByte()))
+object EndScriptInstr : SimpleInstr("end-script", byteArrayOf(0xa0.toByte()))
 
 // 0xa8 if (@var)
 class JumpIfVarZeroInst(val varSpec: VarSpec, val skipOffset: Int) : Instruction {
@@ -1578,6 +1649,8 @@ sealed interface ByteParam {
     val byteCount: Int
     fun toSource(): String
     val isImmediate: Boolean
+    val isVariable: Boolean
+        get() = !isImmediate
     fun emitBytes(out: DataOutput)
 }
 
@@ -1809,7 +1882,7 @@ fun decompileInstruction(bytes: ByteArray, offset: Int): Instruction? {
 //                    6 -> ActorInstr.StandAnimation(readByteParam(data, opcode2, 0x80))
 //                    7 -> ActorInstr.Animation(readByteParam(data, opcode2, 0x80), readByteParam(data, opcode2, 0x40), readByteParam(data, opcode2, 0x20))
                     8 -> ActorInstr.Default
-//                    9 -> ActorInstr.Elevation(readWordParam(data, opcode2, 0x80))
+                    9 -> ActorInstr.Elevation(readWordParam(data, opcode2, 0x80))
 //                    10 -> ActorInstr.AnimationDefault
 /*
                     11 -> {
@@ -1905,6 +1978,12 @@ fun decompileInstruction(bytes: ByteArray, offset: Int): Instruction? {
         }
 
         0x20 -> StopMusicOpcode
+
+        0x23, 0xa3 -> {
+            val resultVar = readResultVar(data)
+            val objectParam = readWordParam(data, opcode, 0x80)
+            AssignResultOfActorYInstr(resultVar, objectParam)
+        }
 
         0x24, 0x64, 0xa4, 0xe4 -> {
             val objectParam = readWordParam(data, opcode, 0x80)
@@ -2077,6 +2156,8 @@ fun decompileInstruction(bytes: ByteArray, offset: Int): Instruction? {
 
             SubtractInstr(resultVar, valueParam)
         }
+
+        0x3c, 0xbc -> StopSoundInstr(readByteParam(data, opcode, 0x80))
 
         0x3d, 0x7d, 0xbd, 0xfd -> {
             val resultVar = readResultVar(data)
