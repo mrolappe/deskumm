@@ -15,7 +15,6 @@ import java.io.DataOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.io.RandomAccessFile
-import kotlin.experimental.xor
 
 private val logger = KotlinLogging.logger {}
 
@@ -57,6 +56,8 @@ enum class RoomFileBlockId(val id: String) {
     }
 
     fun matches(blockId4: BlockId4): Boolean = blockId4.matches(id)
+
+    fun toBlockId4(): BlockId4 = BlockId4(id)
 
     companion object {
         fun from(blockId4: BlockId4): RoomFileBlockId = valueOf(blockId4.asString())
@@ -140,7 +141,6 @@ class ScummDataFileV5(val file: RandomAccessFile, val xorCode: Byte = 0x69) : Cl
     fun expectAndSeekToEndOfBlock(blockId: RoomFileBlockId) {
         val blockStart = file.filePointer
         val blockHeader = readBlockHeader()
-//        println(blockHeader)
         blockHeader.expectBlockId(blockId)
         file.seek(blockStart + blockHeader.blockLength.value)
     }
@@ -231,11 +231,7 @@ data class RoomHeaderBlockV5(val width: Int, val height: Int, val objectCount: I
 }
 
 fun BlockHeaderV5.expectBlockId(expectedBlockId: RoomFileBlockId) {
-    logger.debug { "expecting block ID $expectedBlockId, got $blockId" }
-
-    if (!expectedBlockId.matches(blockId)) {
-        throw IllegalArgumentException("Expected block ID $expectedBlockId, but got ${blockId.asString()}")
-    }
+    expectBlockId(expectedBlockId.toBlockId4())
 }
 
 class DumpRoomFileCommand : CliktCommand() {
@@ -246,6 +242,7 @@ class DumpRoomFileCommand : CliktCommand() {
     val dumpObjectCode by option("--dump-object-code").boolean().default(false)
     val dumpLocalScripts by option("--dump-local-scripts").boolean().default(false)
     val extractRoomImage by option("--extract-room-image").boolean().default(false)
+    val extractClut by option("--extract-clut").boolean().default(false)
 
     override fun run() {
         dumpRoomFile(roomFile, encoded)
@@ -259,17 +256,17 @@ class DumpRoomFileCommand : CliktCommand() {
             blockHeader.expectBlockId(RoomFileBlockId.ROOM)
 
             val roomHeaderBlock = file.readRoomHeaderBlock()
-//            println(roomHeaderBlock)
+            logger.info { "Room header block: $roomHeaderBlock" }
 
             file.expectAndSeekToEndOfBlock(RoomFileBlockId.CYCL)
             file.expectAndSeekToEndOfBlock(RoomFileBlockId.TRNS)
             file.expectAndSeekToEndOfBlock(RoomFileBlockId.EPAL)
             file.expectAndSeekToEndOfBlock(RoomFileBlockId.BOXD)
             file.expectAndSeekToEndOfBlock(RoomFileBlockId.BOXM)
-            file.expectAndSeekToEndOfBlock(RoomFileBlockId.CLUT)
+            dumpPalette(file, path.nameWithoutExtension)
             file.expectAndSeekToEndOfBlock(RoomFileBlockId.SCAL)
 
-            dumpRoomImage(file, roomHeaderBlock.objectCount)
+            dumpRoomImage(file, roomHeaderBlock.objectCount, path.nameWithoutExtension)
 
 //            repeat(roomHeaderBlock.objectCount.toInt()) {
 //                file.expectAndSeekToEndOfBlock(RoomFileBlockId.OBIM)
@@ -304,11 +301,27 @@ class DumpRoomFileCommand : CliktCommand() {
         }
     }
 
-    private fun dumpRoomImage(file: ScummDataFileV5, objectCount: Int) {
+    private fun dumpPalette(file: ScummDataFileV5, basename: String) {
+        if (extractClut) {
+            val clutHeader = file.expectBlockHeaderWithId(RoomFileBlockId.CLUT)
+
+            DataOutputStream(FileOutputStream("data/$basename.CLUT")).use { out ->
+                clutHeader.writeTo(out)
+                val clutBytes = ByteArray(clutHeader.contentLength.value)
+                file.file.readFully(clutBytes)
+                out.write(clutBytes)
+            }
+        } else {
+            file.expectAndSeekToEndOfBlock(RoomFileBlockId.CLUT)
+        }
+    }
+
+    private fun dumpRoomImage(file: ScummDataFileV5, objectCount: Int, baseName: String) {
         val rmimHeader = file.expectBlockHeaderWithId(RoomFileBlockId.RMIM)
 
         if (extractRoomImage) {
-            DataOutputStream(FileOutputStream("TODO.RMIM")).use { out ->
+            // TODO better specification of target file name
+            DataOutputStream(FileOutputStream("data/$baseName.RMIM")).use { out ->
                 rmimHeader.writeTo(out)
                 val rmimBytes = ByteArray(rmimHeader.contentLength.value)
                 file.file.readFully(rmimBytes)
@@ -337,7 +350,7 @@ class DumpRoomFileCommand : CliktCommand() {
             file.expectAndSeekToEndOfBlock(RoomFileBlockId.IMHD)
 
             val peekBlockId = file.peekBlockId()
-            println("peek block id: $peekBlockId")
+            logger.debug { "peek block id: $peekBlockId" }
             skipBlocksWithId(file, RoomFileBlockId.IM00, RoomFileBlockId.IM01, RoomFileBlockId.IM02, RoomFileBlockId.IM03)
             when(peekBlockId) {
                 else -> {}

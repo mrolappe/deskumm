@@ -4,9 +4,10 @@ import java.io.DataInput
 import java.io.DataOutput
 import java.io.DataOutputStream
 import java.io.RandomAccessFile
+import kotlin.experimental.and
 
 fun DataInput.readShortLittleEndian(): Short {
-    return java.lang.Short.reverseBytes(readShort())
+    return java.lang.Short.reverseBytes(readShort()).and(0xffff.toShort())
 }
 
 fun DataInput.readIntLittleEndian(): Int {

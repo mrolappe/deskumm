@@ -21,7 +21,7 @@ class DumpDirFileCommand : CliktCommand() {
                 DirectoryBlockId.DROO to drooBlockHandler,
                 DirectoryBlockId.DSCR to dscrBlockHandler,
                 DirectoryBlockId.DSOU to defaultBlockHandler,
-                DirectoryBlockId.DCOS to defaultBlockHandler,
+                DirectoryBlockId.DCOS to defaultGlobDirBlockHandler,
                 DirectoryBlockId.DCHR to defaultGlobDirBlockHandler,
                 DirectoryBlockId.DOBJ to dobjBlockHandler)
 

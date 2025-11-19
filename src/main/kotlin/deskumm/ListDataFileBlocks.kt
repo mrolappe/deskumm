@@ -82,7 +82,7 @@ fun listDataFileBlocks(dataFile: RandomAccessFile) {
         while (dataFile.filePointer < dataFile.length()) {
             val absoluteOffsetOfBlock = dataFile.filePointer
 
-            val blockHeader = dataFile.readBlockHeader()
+            val blockHeader = dataFile.readBlockHeaderXorEncoded()
 
             println("@$absoluteOffsetOfBlock: ${blockHeader.blockId}, len: ${blockHeader.blockLength} (end: ${absoluteOffsetOfBlock + blockHeader.blockLength})")
 
@@ -115,16 +115,16 @@ typealias DataFileBlockLength = Int
 
 data class DataFileBlockHeader(val blockId: DataFileBlockId, val blockLength: DataFileBlockLength)
 
-fun DataInput.readBlockHeader(): DataFileBlockHeader {
+fun DataInput.readBlockHeaderXorEncoded(code: Byte = 0x69): DataFileBlockHeader {
 //    println("readBlockHeader @ $filePointer")
-    val blockId = readBlockId()
-    val blockLength = readInt().xor(0x69696969)
+    val blockId = readBlockIdXorEncoded(code)
+    val blockLength = readInt().xor(xorInt(code))
     return DataFileBlockHeader(blockId, blockLength)
 }
 
-fun DataInput.readBlockId(): DataFileBlockId {
+fun DataInput.readBlockIdXorEncoded(code: Byte): DataFileBlockId {
     val idBytes = ByteArray(4)
-    readXorEncoded(idBytes, 0, 4, 0x69)
+    readXorEncoded(idBytes, 0, 4, code)
     return DataFileBlockId.valueOf(String(idBytes))
 }
 

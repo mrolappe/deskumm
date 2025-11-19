@@ -21,9 +21,11 @@ class WriteDummyRoomCommand : CliktCommand() {
     val outFile by argument(name = "out-file", help = "output file").path()
     val roomImage by option("--room-image", help = "Use room image from this file for the output")
         .path(mustExist = true)
+    val clutFile by option("--clut-file", help = "Use palette from this file for the output")
+        .path(mustExist = true)
 
     override fun run() {
-        writeDummyRoom(outFile, roomImage)
+        writeDummyRoom(outFile, roomImage, clutFile)
     }
 }
 
@@ -72,14 +74,14 @@ data class ColorCycleBlockV5(val entries: List<ColorCycleEntry>) : BlockV5 {
         get() = BlockLengthV5(headerLength + contentLength)
 }
 
-fun writeDummyRoom(path: Path, roomImageFile: Path?) {
+fun writeDummyRoom(path: Path, roomImageFile: Path?, clutFile: Path?) {
     DataOutputStream(FileOutputStream(path.toFile())).use { out ->
         val objectCount = 0
 
         val blocksInRoom = mutableListOf<BlockV5>()
 
         // RMHD
-        val rmhdBlock = RoomHeaderBlockV5(11, 77, objectCount)
+        val rmhdBlock = RoomHeaderBlockV5(784, 144, objectCount)    // mi2 room7
             .also { blocksInRoom.add(it) }
 
         // CYCL
@@ -103,8 +105,7 @@ fun writeDummyRoom(path: Path, roomImageFile: Path?) {
             .also { blocksInRoom.add(it) }
 
         // CLUT
-        val clutBlock = RawBlockV5(BlockId4("CLUT"), ByteArray(0))
-            .also { blocksInRoom.add(it) }
+        clutBlock(clutFile).let { blocksInRoom.add(it) }
 
         // SCAL
         val scalBlock = RawBlockV5(BlockId4("SCAL"), ByteArray(0))
@@ -140,8 +141,7 @@ fun writeDummyRoom(path: Path, roomImageFile: Path?) {
         }
 
         // EXCD
-        val excdBlock = RawBlockV5(BlockId4("EXCD"), ByteArray(0))
-            .also { blocksInRoom.add(it) }
+        RawBlockV5(BlockId4("EXCD"), exitCodeBytes()).let { blocksInRoom.add(it) }
 
         // ENCD
         val encdBlock = RawBlockV5(BlockId4("ENCD"), dummyEntryCodeBytes())
@@ -181,7 +181,52 @@ fun writeDummyRoom(path: Path, roomImageFile: Path?) {
         val contentLength = blocksInRoom.sumOf { it.blockLength.value }
         writeBlockHeader(out, BlockId4("ROOM"), contentLength)
         blocksInRoom.forEach { it.writeTo(out) }
+
+        println("Dummy room written to $path")
     }
+}
+
+private fun exitCodeBytes(): ByteArray {
+    return ByteArrayOutputStream().use { baos ->
+        DataOutputStream(baos).use { out ->
+            emitBytesForBannerColorString(out)
+
+            listOf(0xfc, 0xfd).forEach { who ->
+                // who == 0xfe||0xff -> load charset 0
+                DebugInstr(ImmediateWordParam(who)).emitBytes(out)
+
+                val printInstr = PrintInstr(
+                    ImmediateByteParam(who),
+                    listOf(PrintInstr.Text(ScummStringBytesV5("exit code in da house".toByteArray() + byteArrayOf(0))))
+                )
+
+                printInstr.emitBytes(out)
+            }
+
+            EndScriptInstr.emit(out)
+        }
+
+        baos.toByteArray()
+    }
+}
+
+private fun clutBlock(clutFile: Path?): RawBlockV5 {
+    val clutBlock = if (clutFile == null) {
+        RawBlockV5(BlockId4("CLUT"), ByteArray(0))
+
+    } else {
+        DataInputStream(clutFile.toFile().inputStream()).use {
+            logger.info { "Copying palette from $clutFile" }
+
+            val blockHeader = BlockHeaderV5.readFrom(it)
+            blockHeader.expectBlockId(RoomFileBlockId.CLUT)
+
+            val clutBytes = ByteArray(blockHeader.contentLength.value)
+            it.readFully(clutBytes)
+            RawBlockV5(BlockId4("CLUT"), clutBytes)
+        }
+    }
+    return clutBlock
 }
 
 fun dummyEntryCodeBytes(): ByteArray {
@@ -193,16 +238,30 @@ fun dummyEntryCodeBytes(): ByteArray {
 //    )
 
     DataOutputStream(baos).use { dataOut ->
-       emitDummyScriptBytes(dataOut)
+//       emitDummyScriptBytes(dataOut)
 
-//        val drawBoxBytes = DrawBoxInstr(
-//            ImmediateWordParam(10),
-//            ImmediateWordParam(10),
-//            ImmediateWordParam(150),
-//            ImmediateWordParam(300),
-//            ImmediateByteParam(2)
-//        ).emitBytes()
-//        dataOut.write(drawBoxBytes)
+//        CursonOnEmit.bytes().let { dataOut.write(it) }
+//        CursorSoftOnEmit.bytes().let { dataOut.write(it) }
+//        UserPutOnEmit.bytes().let { dataOut.write(it) }
+
+        DebugInstr(ImmediateWordParam(1177)).emitBytes(dataOut)
+
+        val actorParam = ImmediateByteParam(11)
+
+//        DoAnimationInstr(actorParam, ImmediateByteParam(250))
+
+        val drawBoxBytes = DrawBoxInstr(
+            ImmediateWordParam(10),
+            ImmediateWordParam(10),
+            ImmediateWordParam(150),
+            ImmediateWordParam(300),
+            ImmediateByteParam(2)
+        ).emitBytes()
+        dataOut.write(drawBoxBytes)
+
+        DebugInstr(ImmediateWordParam(1337)).emitBytes(dataOut)
+
+        EndScriptInstr.emit(dataOut)
     }
 
     return baos.toByteArray()

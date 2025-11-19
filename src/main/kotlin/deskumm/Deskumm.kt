@@ -30,9 +30,21 @@ class DeskummCommand : CliktCommand() {
     }
 }
 
+private fun applyParamBits(opcode: Int, param1: Instruction.Param, param2: Instruction.Param? = null, param3: Instruction.Param? = null): Int {
+    val param1Bit = if (param1.isVariable) 0x80 else 0
+    val param2Bit = param2?.let { if (it.isVariable) 0x40 else 0 } ?: 0
+    val param3Bit = param3?.let { if (it.isVariable) 0x20 else 0 } ?: 0
+    return (opcode or param1Bit or param2Bit or param3Bit).and(0xff)
+}
+
 sealed interface Instruction {
     fun toSource(): String
     val length: Int
+
+    interface Param {
+        val byteCount: Int
+        val isVariable: Boolean
+    }
 }
 
 abstract class Opcode(val name: String, override val length: Int) : Instruction {
@@ -345,6 +357,13 @@ class DoAnimationInstr(val actorParam: ByteParam, val animationParam: ByteParam)
 
     override val length: Int
         get() = 1 + actorParam.byteCount + animationParam.byteCount
+
+    fun emitBytes(out: DataOutput) {
+        val opcode = applyParamBits(0x11, actorParam, animationParam)
+        out.write(byteArrayOf(opcode.toByte()))
+        actorParam.emitBytes(out)
+        animationParam.emitBytes(out)
+    }
 }
 
 // 0x12/0x92
@@ -462,9 +481,10 @@ class ActorInstr(val actorParam: ByteParam, val subs: List<Sub>) : Instruction {
         get() = 2 /* opcode + final 0xff */ + actorParam.byteCount + subs.sumOf { it.byteSize }
 }
 
-class PrintInstr(val who: ByteParam, val subs: List<Sub>) : Instruction {
+// 0x14/0x94
+class PrintInstr(val whoParam: ByteParam, val subs: List<Sub>) : Instruction {
     override fun toSource(): String {
-        return "TODO print ${who.toSource()} ${subs.joinToString(" ") { it.source }}"
+        return "TODO print ${whoParam.toSource()} ${subs.joinToString(" ") { it.source }}"
     }
 
     override val length: Int
@@ -473,12 +493,21 @@ class PrintInstr(val who: ByteParam, val subs: List<Sub>) : Instruction {
             return 2 /* opcode + who */ + additional + subs.sumOf { it.byteSize }
         }
 
-//    fun emitBytes(out: DataOutput) {
-//
-//    }
+    fun emitBytes(out: DataOutput) {
+        out.writeByte(applyParamBits(0x14, whoParam))
+        whoParam.emitBytes(out)
+
+        subs.forEach { it.emitBytes(out) }
+
+        if (subs.last() !is Text) {
+            out.writeByte(0xff)
+        }
+    }
+
     sealed interface Sub {
         val byteSize: Int
         val source: String
+        fun emitBytes(out: DataOutput)
     }
 
     // 0x0
@@ -487,6 +516,8 @@ class PrintInstr(val who: ByteParam, val subs: List<Sub>) : Instruction {
             get() = 1 + xParam.byteCount + yParam.byteCount
         override val source: String
             get() = "at ${xParam.toSource()}, ${yParam.toSource()}"
+
+        override fun emitBytes(out: DataOutput) = out.writeByte(applyParamBits(0x0, xParam, yParam))
     }
 
     // 0x1
@@ -495,6 +526,8 @@ class PrintInstr(val who: ByteParam, val subs: List<Sub>) : Instruction {
             get() = 1 + colorParam.byteCount
         override val source: String
             get() = "color ${colorParam.toSource()}"
+
+        override fun emitBytes(out: DataOutput) = out.writeByte(applyParamBits(0x1, colorParam))
     }
 
     // 0x04
@@ -503,6 +536,8 @@ class PrintInstr(val who: ByteParam, val subs: List<Sub>) : Instruction {
             get() = 1
         override val source: String
             get() = "center"
+
+        override fun emitBytes(out: DataOutput) = out.writeByte(0x04)
     }
 
     // 0x07
@@ -511,6 +546,8 @@ class PrintInstr(val who: ByteParam, val subs: List<Sub>) : Instruction {
             get() = 1
         override val source: String
             get() = "overhead"
+
+        override fun emitBytes(out: DataOutput) = out.writeByte(0x07)
     }
 
     // 0x08
@@ -519,6 +556,10 @@ class PrintInstr(val who: ByteParam, val subs: List<Sub>) : Instruction {
             get() = 1 + offsetParam.byteCount + delayParam.byteCount
         override val source: String
             get() = "say-voice ${offsetParam.toSource()}, ${delayParam.toSource()}"
+
+        override fun emitBytes(out: DataOutput) {
+            out.writeByte(applyParamBits(0x08, offsetParam, delayParam))
+        }
     }
 
     class Text(val stringBytes: ScummStringBytesV5) : Sub {
@@ -553,6 +594,11 @@ class PrintInstr(val who: ByteParam, val subs: List<Sub>) : Instruction {
             get() = 1 /* opcode 0xf */ + stringBytes.byteCount
         override val source: String
             get() = "text \"${stringBytes.toSource()}\""  // TODO embedded codes
+
+        override fun emitBytes(out: DataOutput) {
+            out.writeByte(0xf)
+            out.write(stringBytes.bytes)
+        }
     }
 
     class Invalid(val opcode: Int) : Sub {
@@ -560,6 +606,8 @@ class PrintInstr(val who: ByteParam, val subs: List<Sub>) : Instruction {
             get() = 1
         override val source: String
             get() = "!invalid 0x$opcode (0x${opcode.and(0xf)})!"
+
+        override fun emitBytes(out: DataOutput): Unit = throw IllegalStateException("Not gonna happen")
     }
 }
 
@@ -1120,6 +1168,18 @@ class ScriptRunningInstr(val resultVar: ResultVar, val scriptParam: ByteParam) :
         get() = 1 + resultVar.byteCount + scriptParam.byteCount
 }
 
+// 0x6b/0xeb
+class DebugInstr(val valueParam: WordParam) : Instruction {
+    override fun toSource(): String = "debug ${valueParam.toSource()}"
+
+    override val length: Int
+        get() = 1 + valueParam.byteCount
+
+    fun emitBytes(out: DataOutput) {
+        out.writeByte(applyParamBits(0x6b, valueParam))
+        valueParam.emitBytes(out)
+    }
+}
 // 0x6c/0xec
 class AssignActorWidthInstr(val resultVar: ResultVar, val actorParam: ByteParam) : Instruction {
     override fun toSource(): String = "${resultVar.toSource()} := actor-width ${actorParam.toSource()}"
@@ -1645,11 +1705,11 @@ fun decodeInstructionsFromScriptBytes(scriptBytes: ByteArray): List<Pair<Int, In
     return opcodes
 }
 
-sealed interface ByteParam {
-    val byteCount: Int
+sealed interface ByteParam : Instruction.Param {
+//    val byteCount: Int
     fun toSource(): String
     val isImmediate: Boolean
-    val isVariable: Boolean
+    override val isVariable: Boolean
         get() = !isImmediate
     fun emitBytes(out: DataOutput)
 }
@@ -1685,10 +1745,12 @@ fun DataInput.readByteParam() : ByteParam { // TODO ByteVarParam
     return ImmediateByteParam(readByte().toInt().and(0xff))
 }
 
-sealed interface WordParam {
-    val byteCount: Int
+sealed interface WordParam : Instruction.Param {
+//    val byteCount: Int
     fun toSource(): String
     val isImmediate: Boolean
+    override val isVariable: Boolean
+        get() = !isImmediate
     fun emitBytes(out: DataOutput)
 }
 
@@ -2264,6 +2326,8 @@ fun decompileInstruction(bytes: ByteArray, offset: Int): Instruction? {
 
             ScriptRunningInstr(resultVar, scriptParam)
         }
+
+        0x6b, 0xeb -> DebugInstr(readWordParam(data, opcode, 0x80))
 
         0x6c, 0xec -> {
             val resultVar = readResultVar(data)

@@ -30,11 +30,11 @@ class ExtractFromLecfCommand : CliktCommand() {
 
     override fun run() {
         RandomAccessFile(lecfFile, "r").use { file ->
-            val lecfBlockHeader = file.readBlockHeader()
+            val lecfBlockHeader = file.readBlockHeaderXorEncoded()
             println(lecfBlockHeader)
 
             file.seek(offset.toLong())
-            val blockHeaderAtOffset = file.readBlockHeader()
+            val blockHeaderAtOffset = file.readBlockHeaderXorEncoded()
             println("$blockHeaderAtOffset, ok: ${blockId == blockHeaderAtOffset.blockId}")
 
             RandomAccessFile(outFile ?: File("extract.out"), "rw").use { outFile ->

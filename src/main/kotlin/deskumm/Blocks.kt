@@ -1,24 +1,29 @@
 package deskumm
 
+import io.github.oshai.kotlinlogging.KotlinLogging
 import java.io.DataInput
 import java.io.DataOutput
 import kotlin.experimental.xor
 
-data class BlockId4(val bytes: ByteArray) {
-    constructor(name: String) : this(name.toByteArray())
+private val logger = KotlinLogging.logger {}
+
+data class BlockId4(val name: String) {
+    constructor(bytes: ByteArray) : this(bytes.decodeToString())
 
     init {
-        require(bytes.size == 4)
+        require(name.length == 4)
     }
 
-    fun matches(other: String) = this.bytes.contentEquals(other.toByteArray())
+    fun matches(other: BlockId4) = name == other.name
 
-    fun asString(): String {
-        return bytes.decodeToString()
-    }
+    fun matches(other: String) = name == other
 
-    override fun toString(): String {
-        return bytes.decodeToString()
+    fun asString(): String = name
+
+    override fun toString(): String = name
+
+    fun writeTo(out: DataOutput) {
+        out.write(name.toByteArray())
     }
 
     companion object {
@@ -55,7 +60,7 @@ value class ContentLengthV5(val value: Int) {
 
 data class BlockHeaderV5(val blockId: BlockId4, val blockLength: BlockLengthV5) {
     fun writeTo(out: DataOutput) {
-        out.write(blockId.bytes)
+        blockId.writeTo(out)
         out.writeInt(blockLength.value)
     }
 
@@ -73,10 +78,36 @@ data class BlockHeaderV5(val blockId: BlockId4, val blockLength: BlockLengthV5) 
     }
 }
 
+infix fun BlockId4.isExpectedToBe(expectedBlockId: BlockId4) {
+    logger.debug { "expecting block ID $expectedBlockId, got $this" }
+
+    if (!this.matches(expectedBlockId)) {
+        throw IllegalArgumentException("Expected block ID $expectedBlockId, but got ${this.asString()}")
+    }
+}
+
+fun BlockHeaderV5.expectBlockId(expectedBlockId: BlockId4) {
+    this.blockId isExpectedToBe expectedBlockId
+}
+
+fun expectAndSeekToEndOfBlock(input: DataInput, expectedBlockId: BlockId4) {
+    val blockHeader = BlockHeaderV5.readFrom(input)
+    blockHeader.expectBlockId(expectedBlockId)
+    input.skipBytes(blockHeader.contentLength.value)
+}
+
 class RawBlockV5(override val blockId: BlockId4, val content: ByteArray) : BlockV5 {
+    companion object {
+        fun readFrom(input: DataInput, xorCode: Byte = 0): RawBlockV5 {
+            val blockHeader = BlockHeaderV5.readFrom(input, xorCode)
+            val content = ByteArray(blockHeader.contentLength.value)
+            input.readFully(content)
+            return RawBlockV5(blockHeader.blockId, content)
+        }
+    }
     override fun writeTo(out: DataOutput) {
         val length = 8 + content.size
-        out.write(blockId.bytes)
+        blockId.writeTo(out)
         out.writeInt(length)
         out.write(content)
     }
