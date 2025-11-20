@@ -44,6 +44,7 @@ sealed interface Instruction {
     interface Param {
         val byteCount: Int
         val isVariable: Boolean
+        fun toSource(): String
     }
 }
 
@@ -51,7 +52,7 @@ abstract class Opcode(val name: String, override val length: Int) : Instruction 
     override fun toSource(): String = name
 }
 
-object EndObject : Opcode("end-object", 1)
+object EndObjectInstr : SimpleInstr("end-object", byteArrayOf(0x00))
 
 class InvalidInstruction(val opcode: ByteArray) : Instruction {
     constructor(opcode: Byte) : this(byteArrayOf(opcode))
@@ -109,6 +110,14 @@ class PutActorAtInstr(val actorParam: ByteParam, val xParam: WordParam, val yPar
     override fun toSource(): String = "put-actor ${actorParam.toSource()} at ${xParam.toSource()}, ${yParam.toSource()}"
     override val length: Int
         get() = 1 + actorParam.byteCount + xParam.byteCount + yParam.byteCount
+
+    fun emitBytes(out: DataOutput) {
+        val opcode = applyParamBits(0x1, actorParam, xParam, yParam)
+        out.writeByte(opcode)
+        actorParam.emitBytes(out)
+        xParam.emitBytes(out)
+        yParam.emitBytes(out)
+    }
 }
 
 // 0x04
@@ -183,11 +192,17 @@ class LoadSoundInstr(val soundParam: ByteParam) : Instruction {
         get() = 2 + soundParam.byteCount
 }
 
-// 0x0c03
+// 0x0c03/0x8c03
 class LoadCostumeInstr(val costumeParam: ByteParam) : Instruction {
     override fun toSource(): String = "load-costume ${costumeParam.toSource()}"
     override val length: Int
         get() = 2 + costumeParam.byteCount
+
+    fun emitBytes(out: DataOutput) {
+        out.write(applyParamBits(0x0c, costumeParam))
+        out.write(0x03)
+        costumeParam.emitBytes(out)
+    }
 }
 
 // 0x0c04
@@ -250,11 +265,17 @@ class LockSoundInstr(val soundParam: ByteParam) : Instruction {
         get() = 2 + soundParam.byteCount
 }
 
-// 0x0c0b
+// 0x0c0b/0x8c0b
 class LockCostumeInstr(val costumeParam: ByteParam) : Instruction {
     override fun toSource(): String = "lock-costume ${costumeParam.toSource()}"
     override val length: Int
         get() = 2 + costumeParam.byteCount
+
+    fun emitBytes(out: DataOutput) {
+        out.write(applyParamBits(0x0c, costumeParam))
+        out.write(0x0b)
+        costumeParam.emitBytes(out)
+    }
 }
 
 // 0x0c0c
@@ -310,11 +331,17 @@ object ClearHeapInstr : Instruction {
         get() = 2
 }
 
-// 0x0c12
+// 0x0c12/0x8c12
 class LoadCharsetInstr(val charsetParam: ByteParam) : Instruction {
     override fun toSource(): String = "load-charset ${charsetParam.toSource()}"
     override val length: Int
         get() = 2 + charsetParam.byteCount
+
+    fun emitBytes(out: DataOutput) {
+        out.write(0x0c)
+        out.write(applyParamBits(0x12, charsetParam))
+        charsetParam.emitBytes(out)
+    }
 }
 
 // 0x0c13
@@ -373,10 +400,24 @@ class CameraPanToInstr(val xParam: WordParam) : Instruction {
         get() = 1 + xParam.byteCount
 }
 
+// 0x13/0x53/0x93/0xd3
 class ActorInstr(val actorParam: ByteParam, val subs: List<Sub>) : Instruction {
+    override fun toSource(): String = "TODO actor ${actorParam.toSource()} ${subs.joinToString { it.source }}"
+
+    override val length: Int
+        get() = 2 /* opcode + final 0xff */ + actorParam.byteCount + subs.sumOf { it.byteSize }
+
+   fun emitBytes(out: DataOutput) {
+       out.writeByte(applyParamBits(0x13, actorParam))
+       actorParam.emitBytes(out)
+       subs.forEach { it.emitBytes(out) }
+       out.writeByte(0xff)
+   }
+
     sealed interface Sub {
         val byteSize: Int
         val source: String
+        fun emitBytes(out: DataOutput)
     }
 
     // 0x1
@@ -385,6 +426,10 @@ class ActorInstr(val actorParam: ByteParam, val subs: List<Sub>) : Instruction {
             get() = 1 + costumeParam.byteCount
         override val source: String
             get() = "costume ${costumeParam.toSource()}"
+
+        override fun emitBytes(out: DataOutput) {
+            out.writeByte(applyParamBits(0x1, costumeParam))
+        }
     }
 
     // 0x2
@@ -393,6 +438,10 @@ class ActorInstr(val actorParam: ByteParam, val subs: List<Sub>) : Instruction {
             get() = 1 + xParam.byteCount + yParam.byteCount
         override val source: String
             get() = "step-dist ${xParam.toSource()}, ${yParam.toSource()}"
+
+        override fun emitBytes(out: DataOutput) {
+            out.writeByte(applyParamBits(0x2, xParam, yParam))
+        }
     }
 
     // 0x04
@@ -401,6 +450,10 @@ class ActorInstr(val actorParam: ByteParam, val subs: List<Sub>) : Instruction {
             get() = 1 + animationParam.byteCount
         override val source: String
             get() = "walk-animation ${animationParam.toSource()}"
+
+        override fun emitBytes(out: DataOutput) {
+            out.writeByte(applyParamBits(0x4, animationParam))
+        }
     }
 
     // 0x05
@@ -409,6 +462,10 @@ class ActorInstr(val actorParam: ByteParam, val subs: List<Sub>) : Instruction {
             get() = 1 + fromParam.byteCount + toParam.byteCount
         override val source: String
             get() = "talk-animation ${fromParam.toSource()} ${toParam.toSource()}"
+
+        override fun emitBytes(out: DataOutput) {
+            out.writeByte(applyParamBits(0x5, fromParam, toParam))
+        }
     }
 
     // 0x8
@@ -417,6 +474,10 @@ class ActorInstr(val actorParam: ByteParam, val subs: List<Sub>) : Instruction {
             get() = 1
         override val source: String
             get() = "default"
+
+        override fun emitBytes(out: DataOutput) {
+            out.writeByte(0x8)
+        }
     }
 
     // 0x9
@@ -425,13 +486,22 @@ class ActorInstr(val actorParam: ByteParam, val subs: List<Sub>) : Instruction {
             get() = 1 + elevationParam.byteCount
         override val source: String
             get() = "elevation ${elevationParam.toSource()}"
+
+        override fun emitBytes(out: DataOutput) {
+            out.writeByte(applyParamBits(0x9, elevationParam))
+        }
     }
+
     // 0xc
     class TalkColor(val colorParam: ByteParam) : Sub {
         override val byteSize: Int
             get() = 1 + colorParam.byteCount
         override val source: String
             get() = "talk-color ${colorParam.toSource()}"
+
+        override fun emitBytes(out: DataOutput) {
+            out.writeByte(applyParamBits(0xc, colorParam))
+        }
     }
 
     // 0xd
@@ -440,6 +510,11 @@ class ActorInstr(val actorParam: ByteParam, val subs: List<Sub>) : Instruction {
             get() = 1 /* opcode */ + name.byteCount
         override val source: String
             get() = "actor-name \"${name.toSource()}\""
+
+        override fun emitBytes(out: DataOutput) {
+            out.writeByte(0xd)
+            out.write(name.bytes)
+        }
     }
 
     // 0x12
@@ -448,6 +523,10 @@ class ActorInstr(val actorParam: ByteParam, val subs: List<Sub>) : Instruction {
             get() = 1
         override val source: String
             get() = "never-zclip"
+
+        override fun emitBytes(out: DataOutput) {
+            out.writeByte(0x12)
+        }
     }
 
     // 0x13
@@ -456,6 +535,10 @@ class ActorInstr(val actorParam: ByteParam, val subs: List<Sub>) : Instruction {
             get() = 1 + someParam.byteCount
         override val source: String
             get() = "always-zclip ${someParam.toSource()}"
+
+        override fun emitBytes(out: DataOutput) {
+            out.writeByte(applyParamBits(0x13, someParam))
+        }
     }
 
     // 0x14
@@ -464,6 +547,10 @@ class ActorInstr(val actorParam: ByteParam, val subs: List<Sub>) : Instruction {
             get() = 1
         override val source: String
             get() = "ignore-boxes"
+
+        override fun emitBytes(out: DataOutput) {
+            out.writeByte(0x14)
+        }
     }
 
     class Invalid(val opcode: Int) : Sub {
@@ -471,14 +558,13 @@ class ActorInstr(val actorParam: ByteParam, val subs: List<Sub>) : Instruction {
             get() = 1
         override val source: String
             get() = "!actor-invalid-sub! 0x${opcode.toHexString()}"
+
+        override fun emitBytes(out: DataOutput) {
+            out.write(opcode)
+        }
     }
 
-    override fun toSource(): String {
-        return "TODO actor ${actorParam.toSource()} ${subs.joinToString { it.source }}"
-    }
 
-    override val length: Int
-        get() = 2 /* opcode + final 0xff */ + actorParam.byteCount + subs.sumOf { it.byteSize }
 }
 
 // 0x14/0x94
@@ -517,7 +603,11 @@ class PrintInstr(val whoParam: ByteParam, val subs: List<Sub>) : Instruction {
         override val source: String
             get() = "at ${xParam.toSource()}, ${yParam.toSource()}"
 
-        override fun emitBytes(out: DataOutput) = out.writeByte(applyParamBits(0x0, xParam, yParam))
+        override fun emitBytes(out: DataOutput) {
+            out.writeByte(applyParamBits(0x0, xParam, yParam))
+            xParam.emitBytes(out)
+            yParam.emitBytes(out)
+        }
     }
 
     // 0x1
@@ -527,7 +617,10 @@ class PrintInstr(val whoParam: ByteParam, val subs: List<Sub>) : Instruction {
         override val source: String
             get() = "color ${colorParam.toSource()}"
 
-        override fun emitBytes(out: DataOutput) = out.writeByte(applyParamBits(0x1, colorParam))
+        override fun emitBytes(out: DataOutput) {
+            out.writeByte(applyParamBits(0x1, colorParam))
+            colorParam.emitBytes(out)
+        }
     }
 
     // 0x04
@@ -559,6 +652,8 @@ class PrintInstr(val whoParam: ByteParam, val subs: List<Sub>) : Instruction {
 
         override fun emitBytes(out: DataOutput) {
             out.writeByte(applyParamBits(0x08, offsetParam, delayParam))
+            offsetParam.emitBytes(out)
+            delayParam.emitBytes(out)
         }
     }
 
@@ -667,6 +762,10 @@ class PickUpObjectInstr(val objectParam: WordParam, val roomParam: ByteParam) : 
         get() = 1 + objectParam.byteCount + roomParam.byteCount
 }
 
+fun v5StringVarName(param: Instruction.Param): String {
+    return "str[${param.toSource()}]"
+}
+
 fun v5StringVarName(str: Int): String {
     return when (str) {
         1 -> "insert-disk-text"
@@ -686,7 +785,7 @@ fun v5StringVarName(str: Int): String {
     }
 }
 
-// 27 01	*@string = @zeichenkette
+// 0x2701
 class AssignLiteralToStringInstr(val stringParam: ByteParam, val stringBytes: ScummStringBytesV5) : Instruction {
     override fun toSource(): String {
         val stringSourceName = if (stringParam is ImmediateByteParam) {
@@ -700,30 +799,74 @@ class AssignLiteralToStringInstr(val stringParam: ByteParam, val stringBytes: Sc
 
     override val length: Int
         get() = 2 /* opcode 0x2701 */ + stringParam.byteCount + stringBytes.byteCount
+
+    fun emitBytes(out: DataOutput) {
+        out.writeByte(0x27)
+        out.writeByte(applyParamBits(0x01, stringParam))
+        stringParam.emitBytes(out)
+        stringBytes.emitBytes(out)
+    }
 }
 
-// 27 04	@var = *@str [@idx]
-class AssignStringCharAtToVarOpcode(val varSpec: VarSpec, val str: Int, val index: Int)
-    : Opcode("assign string char at idx to var", 6) {
-    override fun toSource() = "$varSpec = ${v5StringVarName(str)}[$index]"
+//0x2702
+class AssignStringToStringOpcode(val destStringParam: ByteParam, val srcStringParam: ByteParam) : Instruction {
+    override fun toSource() = "${v5StringVarName(destStringParam)} = ${v5StringVarName(srcStringParam)}"
+    override val length: Int
+        get() = 2 + destStringParam.byteCount + srcStringParam.byteCount
+
+    fun emitBytes(out: DataOutput) {
+        out.writeByte(0x27)
+        out.writeByte(applyParamBits(0x02, destStringParam, srcStringParam))
+        destStringParam.emitBytes(out)
+        srcStringParam.emitBytes(out)
+    }
 }
 
-// 27 02	*@str1 = *@str2
-class AssignStringToStringOpcode(val destStr: Int, val srcStr: Int) : Opcode("str1 = str2", 4) {
-    override fun toSource() = "${v5StringVarName(destStr)} = ${v5StringVarName(srcStr)}"
+// 0x2703
+class SetStringCharAtInstr(val destStringParam: ByteParam, val indexParam: ByteParam, val charParam: ByteParam) : Instruction {
+    override fun toSource() = "${v5StringVarName(destStringParam)}[$indexParam] = $charParam"
+    override val length: Int
+        get() = 2 + destStringParam.byteCount + indexParam.byteCount + charParam.byteCount
+
+    fun emitBytes(out: DataOutput) {
+        out.writeByte(0x27)
+        out.writeByte(applyParamBits(0x03, destStringParam, indexParam, charParam))
+        destStringParam.emitBytes(out)
+        indexParam.emitBytes(out)
+        charParam.emitBytes(out)
+    }
 }
 
-// 27 03	*@str1 [@idx] = @wert
-class SetStringCharAtOpcode(val destStr: Int, val index: Int, val char: Int) : Opcode("str[idx] = char", 5) {
-    override fun toSource() = "${v5StringVarName(destStr)}[$index] = $char"
+// 0x2704
+class AssignStringCharAtInstr(val varSpec: VarSpec, val stringParam: ByteParam, val indexParam: ByteParam) : Instruction {
+    override fun toSource() = "${varSpec.toSourceName()} = ${v5StringVarName(stringParam)}[${indexParam.toSource()}]"
+    override val length: Int
+        get() = 2 + varSpec.byteCount + stringParam.byteCount + indexParam.byteCount
+
+    fun emitBytes(out: DataOutput) {
+        out.write(0x27)
+        out.write(applyParamBits(0x4, stringParam, indexParam))
+        varSpec.emitBytes(out)
+        stringParam.emitBytes(out)
+        indexParam.emitBytes(out)
+    }
 }
 
-// 27 05	*@str [@idx]
-class PushStringCharAtIdxToVarOpcode(val destStr: Int, val index: Int) : Opcode("push str[idx]", 4) {
-    override fun toSource() = "dim ${v5StringVarName(destStr)}[$index]"
+// 0x2705
+class NewStringInstr(val stringParam: ByteParam, val sizeParam: ByteParam) : Instruction {
+    override fun toSource() = "new ${v5StringVarName(stringParam)}[${sizeParam.toSource()}]"
+    override val length: Int
+        get() = 2 + stringParam.byteCount + sizeParam.byteCount
+
+    fun emitBytes(out: DataOutput) {
+        out.writeByte(0x27)
+        out.writeByte(applyParamBits(0x5, stringParam, sizeParam))
+        stringParam.emitBytes(out)
+        sizeParam.emitBytes(out)
+    }
 }
 
-// 0x28
+// 0x2
 class JumpIfVarNotZeroInstr(val varSpec: VarSpec, val jumpOffset: Int) : Instruction {
     override fun toSource(): String = "if ${varSpec.toSourceName()} != 0 jump $jumpOffset"
     override val length: Int
@@ -915,6 +1058,11 @@ class CharsetInstr(val charsetParam: ByteParam) : Instruction {
     override fun toSource(): String = "charset ${charsetParam.toSource()}"
     override val length: Int
         get() = 2 + charsetParam.byteCount
+
+    fun emitBytes(out: DataOutput) {
+        out.write(byteArrayOf(0x2c, applyParamBits(0xd, charsetParam).toByte()))
+        charsetParam.emitBytes(out)
+    }
 }
 
 class CharsetEInstr(val args: List<WordParam>) : Instruction  {
@@ -1093,6 +1241,19 @@ class NewNameOfInstr(val objectParam: WordParam, val name: ScummStringBytesV5) :
     override val length: Int
         get() = 1 /* opcode */ + objectParam.byteCount + name.byteCount
 
+}
+
+// 0x56/0xd6
+class AssignResultOfActorMovingInstr(val resultVar: ResultVar, val actorParam: ByteParam) : Instruction {
+    override fun toSource(): String = "${resultVar.toSource()} := actor-moving ${actorParam.toSource()}"
+    override val length: Int
+        get() = 1 + resultVar.byteCount + actorParam.byteCount
+
+    fun emitBytes(out: DataOutput) {
+        out.write(applyParamBits(0x56, actorParam))
+        resultVar.emitBytes(out)
+        actorParam.emitBytes(out)
+    }
 }
 
 // 0x58 <byte != 0x00>
@@ -1362,7 +1523,7 @@ abstract class SimpleInstr(val name: String, private val bytes: ByteArray) : Ins
     override val length: Int
         get() = bytes.size
 
-    fun emit(out: DataOutput) {
+    fun emitBytes(out: DataOutput) {
         out.write(bytes)
     }
 }
@@ -1450,6 +1611,15 @@ class SayLineInstr(val subs: List<PrintInstr.Sub>) : Instruction {
                 2 /* opcode, 0xff */ + subs.sumOf { it.byteSize }
             }
         }
+
+    fun emitBytes(out: DataOutput) {
+        out.writeByte(0xd8)
+        subs.forEach { it.emitBytes(out) }
+
+        if (subs.last() !is PrintInstr.Text) {
+            out.writeByte(0xff)
+        }
+    }
 }
 
 class ExpressionInstr(val resultVar: ResultVar, val subs: List<Sub>) : Instruction {
@@ -1707,7 +1877,6 @@ fun decodeInstructionsFromScriptBytes(scriptBytes: ByteArray): List<Pair<Int, In
 
 sealed interface ByteParam : Instruction.Param {
 //    val byteCount: Int
-    fun toSource(): String
     val isImmediate: Boolean
     override val isVariable: Boolean
         get() = !isImmediate
@@ -1747,7 +1916,6 @@ fun DataInput.readByteParam() : ByteParam { // TODO ByteVarParam
 
 sealed interface WordParam : Instruction.Param {
 //    val byteCount: Int
-    fun toSource(): String
     val isImmediate: Boolean
     override val isVariable: Boolean
         get() = !isImmediate
@@ -1799,7 +1967,7 @@ fun decompileInstruction(bytes: ByteArray, offset: Int): Instruction? {
     val opcode = data.readUnsignedByte()
 
     return when (opcode) {
-        0 -> EndObject
+        0 -> EndObjectInstr
 
         0x1, 0x21, 0x41, 0x61, 0x81, 0xa1, 0xc1, 0xe1 -> {
             val actorParam = readByteParam(data, opcode, 0x80)
@@ -2280,6 +2448,12 @@ fun decompileInstruction(bytes: ByteArray, offset: Int): Instruction? {
             NewNameOfInstr(objectParam, nameStringBytes)
         }
 
+        0x56, 0xd6 -> {
+            val resultVar = readResultVar(data)
+            val actorParam = readByteParam(data, opcode, 0x80)
+            AssignResultOfActorMovingInstr(resultVar, actorParam)
+        }
+
         0x58 -> if (data.readUnsignedByte() != 0) BeginOverrideInstr else EndOverrideInstr
 
         0x5a, 0xda -> {
@@ -2583,6 +2757,7 @@ fun readWordParam(data: DataInput, opcode: Int, parameterMask: Int): WordParam {
 class ResultVar(val varSpec: VarSpec) {
     val byteCount: Int get() = varSpec.byteCount
     fun toSource(): String = varSpec.toSourceName()
+    fun emitBytes(out: DataOutput) = varSpec.emitBytes(out)
 }    // TODO indexed etc.
 
 fun readResultVar(data: DataInput): ResultVar {
@@ -2595,8 +2770,20 @@ fun toObjSpec(objSpec: Int) = objSpec
 
 // raw string bytes, including \0 terminator
 data class ScummStringBytesV5(val bytes: ByteArray) {
+    init {
+        require(bytes.last() == 0.toByte()) { "ScummStringBytesV5 must end with a 0 byte" }
+    }
+
+    companion object {
+        fun from(string: String) = ScummStringBytesV5(string.toByteArray(Charsets.ISO_8859_1) + byteArrayOf(0))
+    }
+
     val byteCount: Int get() = bytes.size
     fun toSource(): String = bytes.decodeToString()
+
+    fun emitBytes(out: DataOutput) {
+        out.write(bytes)
+    }
 }
 
 fun DataInput.readScummStringBytes(): ScummStringBytesV5 {    // TODO control code
@@ -2631,12 +2818,11 @@ fun DataInput.readScummStringBytes(): ScummStringBytesV5 {    // TODO control co
 fun decompileHeapStuffOpcode(bytes: ByteArray, offset: Int): Instruction {
     val data = DataInputStream(ByteArrayInputStream(bytes, offset, bytes.size - offset))
 
-    val opcode = data.readUnsignedByte()
+    val opcode = data.readUnsignedByte()    // 0x0c/0x8c
     val opcode2 = data.readUnsignedByte()
+    val resIdParam = if (opcode != 0x11) readByteParam(data, opcode2, 0x80) else ImmediateByteParam(0)
 
-    val resIdParam = if (opcode2 != 0x11) readByteParam(data, opcode2, 0x80) else ImmediateByteParam(0)
-
-    return when (opcode2) {
+    return when (opcode2.and(0x3f)) {
         1 -> LoadScriptInstr(resIdParam)
         2 -> LoadSoundInstr(resIdParam)
         3 -> LoadCostumeInstr(resIdParam)
@@ -2668,35 +2854,35 @@ fun decompileStringAssignOpcode(bytes: ByteArray, offset: Int): Instruction {
 
     return when (opcode2.and(0x1f)) {
         1 -> {
-            val str = readByteParam(data, opcode2, 0x80)
+            val stringParam = readByteParam(data, opcode2, 0x80)
             val stringBytes = data.readScummStringBytes()
-            AssignLiteralToStringInstr(str, stringBytes)    // TODO convert to string
+            AssignLiteralToStringInstr(stringParam, stringBytes)    // TODO convert to string
         }
 
         2 -> {
-            val destStr = data.readByte().toInt()
-            val srcStr = data.readByte().toInt()
-            AssignStringToStringOpcode(destStr, srcStr)
+            val destStringParam = readByteParam(data, opcode2, 0x80)
+            val srcStringParam = readByteParam(data, opcode2, 0x40)
+            AssignStringToStringOpcode(destStringParam, srcStringParam)
         }
 
         3 -> {
-            val strVar = data.readByte().toInt()
-            val strIdx = data.readByte().toInt()
-            val char = data.readByte().toInt()
-            SetStringCharAtOpcode(strVar, strIdx, char)
+            val stringParam = readByteParam(data, opcode2, 0x80)
+            val indexParam = readByteParam(data, opcode2, 0x40)
+            val charParam = readByteParam(data, opcode2, 0x20)
+            SetStringCharAtInstr(stringParam, indexParam, charParam)
         }
 
-        4 -> {  // @var = *@str [@idx]
-            val destVar = data.readShortLittleEndian().toInt()
-            val str = data.readByte().toInt()
-            val strIdx = data.readByte().toInt()
-            AssignStringCharAtToVarOpcode(toVarSpec(destVar), str, strIdx)
+        4 -> {
+            val destVar = readResultVar(data)
+            val stringParam = readByteParam(data, opcode2, 0x80)
+            val indexParam = readByteParam(data, opcode2, 0x40)
+            AssignStringCharAtInstr(destVar.varSpec, stringParam, indexParam)
         }
 
         5 -> {  // *@str [@idx]
-            val strVar = data.readByte().toInt()
-            val strIdx = data.readByte().toInt()
-            PushStringCharAtIdxToVarOpcode(strVar, strIdx)
+            val stringParam = readByteParam(data, opcode2, 0x80)
+            val indexParam = readByteParam(data, opcode2, 0x40)
+            NewStringInstr(stringParam, indexParam)
         }
 
         else -> InvalidInstruction(byteArrayOf(0x27, opcode2.toByte()))

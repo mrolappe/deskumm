@@ -73,13 +73,6 @@ object CursorSoftOffEmit {
     fun bytes(): ByteArray = byteArrayOf(0x27, 6)
 }
 
-class LoadCharsetInstrEmit(val charset: Int) {
-    init {
-        require(charset in 1..<256) { "Illegal charset: $charset" }
-    }
-
-    fun bytes(): ByteArray = byteArrayOf(0x0c, 0x12, charset.toByte())
-}
 
 class CursorSetCharsetInstr(val charset: Int) {
     init {
@@ -126,7 +119,7 @@ fun emitDummyScriptBytes(dataOut: DataOutput) {
 
         emitBytesForBannerColorString(dataOut)
 
-    EndScriptInstr.emit(dataOut)
+    EndScriptInstr.emitBytes(dataOut)
 //        dataOut.write(CursonOnEmit.bytes())
 //        dataOut.write(CursorSoftOnEmit.bytes())
 
@@ -155,7 +148,7 @@ fun emitDummyScriptBytes(dataOut: DataOutput) {
 
 //    PutActorInRoomInstr(ImmediateByteParam(1), roomParam).emitBytes(dataOut)
 
-    dataOut.write(LoadCharsetInstrEmit(2).bytes())
+    LoadCharsetInstr(ImmediateByteParam(2)).emitBytes(dataOut)
     dataOut.write(CursorSetCharsetInstr(2).bytes())
 
     dataOut.write(byteArrayOf(0x27, 1, 5) + "neu starten?0".toByteArray())
@@ -231,6 +224,15 @@ fun emitBytesForBannerColorString(byteStream: DataOutput) {
     byteStream.write(byteArrayOf(0x27, 3, 21, 29, 5))
     byteStream.write(byteArrayOf(0x27, 3, 21, 30, 2))
 */
+}
+
+fun emitString44(out: DataOutput) {
+    val stringParam = ImmediateByteParam(44)
+    NewStringInstr(stringParam, ImmediateByteParam(105)).emitBytes(out)
+
+    (0..105).forEach {
+        SetStringCharAtInstr(stringParam, ImmediateByteParam(it), ImmediateByteParam(50)).emitBytes(out)
+    }
 }
 
 data class RoomAndOffset(val room: Int, val offset: Int) {
@@ -372,7 +374,7 @@ fun writeEmptyDirFile(dirFile: File) {
             DummyRoomNumberAndOffset,
 
             RoomNumberAndOffset(2, 22),
-            RoomNumberAndOffset(1, 82979),
+            RoomNumberAndOffset(1, 75677 - 397),
         )
         it.writeGenericDirectoryBlock(DirectoryBlockId.DCHR, charsetInfo)
         it.writeDummyDobjBlock()
@@ -381,8 +383,8 @@ fun writeEmptyDirFile(dirFile: File) {
 
 fun costumeInfos(): List<RoomNumberAndOffset> {
     return List(143) { idx ->
-        if (idx == 142) {
-            RoomNumberAndOffset(7, 87605)
+        if (idx == 142 || idx == 20 || idx == 12) {
+            RoomNumberAndOffset(7, 80303 - 397)
         } else {
             RoomNumberAndOffset(0, 0)
         }

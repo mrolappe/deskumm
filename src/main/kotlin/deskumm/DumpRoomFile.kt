@@ -243,6 +243,8 @@ class DumpRoomFileCommand : CliktCommand() {
     val dumpLocalScripts by option("--dump-local-scripts").boolean().default(false)
     val extractRoomImage by option("--extract-room-image").boolean().default(false)
     val extractClut by option("--extract-clut").boolean().default(false)
+    val extractBoxm by option("--extract-boxm").boolean().default(false)
+    val extractBoxd by option("--extract-boxd").boolean().default(false)
 
     override fun run() {
         dumpRoomFile(roomFile, encoded)
@@ -261,8 +263,8 @@ class DumpRoomFileCommand : CliktCommand() {
             file.expectAndSeekToEndOfBlock(RoomFileBlockId.CYCL)
             file.expectAndSeekToEndOfBlock(RoomFileBlockId.TRNS)
             file.expectAndSeekToEndOfBlock(RoomFileBlockId.EPAL)
-            file.expectAndSeekToEndOfBlock(RoomFileBlockId.BOXD)
-            file.expectAndSeekToEndOfBlock(RoomFileBlockId.BOXM)
+            dumpBoxDefinition(file, path.nameWithoutExtension)
+            dumpBoxMatrix(file, path.nameWithoutExtension)
             dumpPalette(file, path.nameWithoutExtension)
             file.expectAndSeekToEndOfBlock(RoomFileBlockId.SCAL)
 
@@ -298,6 +300,34 @@ class DumpRoomFileCommand : CliktCommand() {
 
 
             println("file length: ${file.file.length()}, file pointer: ${file.file.filePointer}")
+        }
+    }
+
+    private fun dumpBoxMatrix(file: ScummDataFileV5, basename: String) {
+        if (extractBoxm) {
+            val boxmHeader = file.expectBlockHeaderWithId(RoomFileBlockId.BOXM)
+            DataOutputStream(FileOutputStream("data/$basename.BOXM")).use { out ->
+                boxmHeader.writeTo(out)
+                val boxmBytes = ByteArray(boxmHeader.contentLength.value)
+                file.file.readFully(boxmBytes)
+                out.write(boxmBytes)
+            }
+        } else {
+            file.expectAndSeekToEndOfBlock(RoomFileBlockId.BOXM)
+        }
+    }
+
+    private fun dumpBoxDefinition(file: ScummDataFileV5, basename: String) {
+        if (extractBoxd) {
+            val boxdHeader = file.expectBlockHeaderWithId(RoomFileBlockId.BOXD)
+            DataOutputStream(FileOutputStream("data/$basename.BOXD")).use { out ->
+                boxdHeader.writeTo(out)
+                val boxdBytes = ByteArray(boxdHeader.contentLength.value)
+                file.file.readFully(boxdBytes)
+                out.write(boxdBytes)
+            }
+        } else {
+            file.expectAndSeekToEndOfBlock(RoomFileBlockId.BOXD)
         }
     }
 

@@ -23,9 +23,13 @@ class WriteDummyRoomCommand : CliktCommand() {
         .path(mustExist = true)
     val clutFile by option("--clut-file", help = "Use palette from this file for the output")
         .path(mustExist = true)
+    val boxdFile by option("--boxd-file", help = "Use box definitions from this file for the output")
+        .path(mustExist = true)
+    val boxmFile by option("--boxm-file", help = "Use box matrices from this file for the output")
+        .path(mustExist = true)
 
     override fun run() {
-        writeDummyRoom(outFile, roomImage, clutFile)
+        writeDummyRoom(outFile, roomImage, clutFile, boxdFile, boxmFile)
     }
 }
 
@@ -74,7 +78,7 @@ data class ColorCycleBlockV5(val entries: List<ColorCycleEntry>) : BlockV5 {
         get() = BlockLengthV5(headerLength + contentLength)
 }
 
-fun writeDummyRoom(path: Path, roomImageFile: Path?, clutFile: Path?) {
+fun writeDummyRoom(path: Path, roomImageFile: Path?, clutFile: Path?, boxdFile: Path?, boxmFile: Path?) {
     DataOutputStream(FileOutputStream(path.toFile())).use { out ->
         val objectCount = 0
 
@@ -97,12 +101,20 @@ fun writeDummyRoom(path: Path, roomImageFile: Path?, clutFile: Path?) {
             .also { blocksInRoom.add(it) }
 
         // BOXD
-        val boxdBlock = RawBlockV5(BlockId4("BOXD"), ByteArray(0))
-            .also { blocksInRoom.add(it) }
+        val boxdBlock = if (boxdFile == null) {
+            RawBlockV5(BlockId4("BOXD"), ByteArray(0))
+        } else {
+            rawBlockFromFile(BlockId4("BOXD"), "box definitions", boxdFile)
+        }
+        blocksInRoom.add(boxdBlock)
 
         // BOXM
-        val boxmBlock = RawBlockV5(BlockId4("BOXM"), ByteArray(0))
-            .also { blocksInRoom.add(it) }
+        val boxmBlock = if (boxmFile == null) {
+            RawBlockV5(BlockId4("BOXM"), ByteArray(0))
+        } else {
+            rawBlockFromFile(BlockId4("BOXM"), "box matrix", boxmFile)
+        }
+        blocksInRoom.add(boxmBlock)
 
         // CLUT
         clutBlock(clutFile).let { blocksInRoom.add(it) }
@@ -186,6 +198,23 @@ fun writeDummyRoom(path: Path, roomImageFile: Path?, clutFile: Path?) {
     }
 }
 
+private fun rawBlockFromFile(
+    blockId: BlockId4,
+    description: String,
+    fromFile: Path
+): RawBlockV5 =
+    DataInputStream(fromFile.toFile().inputStream()).use {
+        logger.info { "Copying $description from $fromFile" }
+
+        val blockHeader = BlockHeaderV5.readFrom(it)
+        blockHeader.expectBlockId(blockId)
+
+        val contentBytes = ByteArray(blockHeader.contentLength.value)
+        it.readFully(contentBytes)
+
+        RawBlockV5(blockId, contentBytes)
+    }
+
 private fun exitCodeBytes(): ByteArray {
     return ByteArrayOutputStream().use { baos ->
         DataOutputStream(baos).use { out ->
@@ -203,7 +232,7 @@ private fun exitCodeBytes(): ByteArray {
                 printInstr.emitBytes(out)
             }
 
-            EndScriptInstr.emit(out)
+            EndScriptInstr.emitBytes(out)
         }
 
         baos.toByteArray()
@@ -237,18 +266,65 @@ fun dummyEntryCodeBytes(): ByteArray {
 //        listOf(PrintInstr.Text(ScummStringBytesV5("entry code in da house".toByteArray() + byteArrayOf(0))))
 //    )
 
-    DataOutputStream(baos).use { dataOut ->
+    DataOutputStream(baos).use { out ->
 //       emitDummyScriptBytes(dataOut)
 
 //        CursonOnEmit.bytes().let { dataOut.write(it) }
 //        CursorSoftOnEmit.bytes().let { dataOut.write(it) }
 //        UserPutOnEmit.bytes().let { dataOut.write(it) }
 
-        DebugInstr(ImmediateWordParam(1177)).emitBytes(dataOut)
+        DebugInstr(ImmediateWordParam(1177)).emitBytes(out)
+
+        emitString44(out)
+
+        AssignLiteralToStringInstr(ImmediateByteParam(6), ScummStringBytesV5.from("string 6"))
+
+        emitBytesForBannerColorString(out)
+
+        val charsetParam = ImmediateByteParam(2)
+        LoadCharsetInstr(charsetParam).emitBytes(out)
+        CharsetInstr(charsetParam).emitBytes(out)
+
+        listOf(0xfc, 0xfd).forEach { who ->
+            // who == 0xfe||0xff -> load charset 0
+            DebugInstr(ImmediateWordParam(who)).emitBytes(out)
+
+            val subs =
+                listOf(
+                    PrintInstr.At(ImmediateWordParam(10), ImmediateWordParam(10)),
+                    PrintInstr.Center,
+                    PrintInstr.Color(ImmediateByteParam(10)),
+                    PrintInstr.Text(ScummStringBytesV5("entry code in da house".toByteArray() + byteArrayOf(0))))
+            val printInstr = PrintInstr(
+                ImmediateByteParam(who),
+                subs
+            )
+
+            printInstr.emitBytes(out)
+        }
 
         val actorParam = ImmediateByteParam(11)
 
-//        DoAnimationInstr(actorParam, ImmediateByteParam(250))
+        DoAnimationInstr(actorParam, ImmediateByteParam(250)).emitBytes(out)
+
+        val costumeParam = ImmediateByteParam(142)
+
+        LockCostumeInstr(costumeParam).emitBytes(out)
+        LoadCostumeInstr(costumeParam).emitBytes(out)
+
+        val actorSubs = listOf(
+            ActorInstr.Default,
+            ActorInstr.Costume(costumeParam),
+            ActorInstr.TalkColor(ImmediateByteParam(15)),
+            ActorInstr.IgnoreBoxes,
+            ActorInstr.NeverZClip
+        )
+        ActorInstr(actorParam, actorSubs).emitBytes(out)
+
+        PutActorInRoomInstr(actorParam, ImmediateByteParam(1)).emitBytes(out)
+        PutActorAtInstr(actorParam, ImmediateWordParam(50), ImmediateWordParam(50)).emitBytes(out)
+
+        SayLineInstr(listOf(PrintInstr.Text(ScummStringBytesV5.from("funzt dat getz?")))).emitBytes(out)
 
         val drawBoxBytes = DrawBoxInstr(
             ImmediateWordParam(10),
@@ -257,11 +333,12 @@ fun dummyEntryCodeBytes(): ByteArray {
             ImmediateWordParam(300),
             ImmediateByteParam(2)
         ).emitBytes()
-        dataOut.write(drawBoxBytes)
+        out.write(drawBoxBytes)
 
-        DebugInstr(ImmediateWordParam(1337)).emitBytes(dataOut)
+        DebugInstr(ImmediateWordParam(1337)).emitBytes(out)
 
-        EndScriptInstr.emit(dataOut)
+        EndObjectInstr.emitBytes(out)
+//        EndScriptInstr.emitBytes(out)
     }
 
     return baos.toByteArray()
