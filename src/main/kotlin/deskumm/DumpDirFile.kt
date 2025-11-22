@@ -20,7 +20,7 @@ class DumpDirFileCommand : CliktCommand() {
                 DirectoryBlockId.MAXS to maxsBlockHandler,
                 DirectoryBlockId.DROO to drooBlockHandler,
                 DirectoryBlockId.DSCR to dscrBlockHandler,
-                DirectoryBlockId.DSOU to defaultBlockHandler,
+                DirectoryBlockId.DSOU to defaultGlobDirBlockHandler,
                 DirectoryBlockId.DCOS to defaultGlobDirBlockHandler,
                 DirectoryBlockId.DCHR to defaultGlobDirBlockHandler,
                 DirectoryBlockId.DOBJ to dobjBlockHandler)
@@ -72,72 +72,47 @@ val maxsBlockHandler = { blockId: DirectoryBlockId, blockLength: DataFileBlockLe
     println("inventoryCount: $inventoryCount")
 }
 
-val drooBlockHandler = { blockId: DirectoryBlockId, blockLength: DataFileBlockLength, data: DataInput ->
+fun defaultDumpDirectoryBlock(
+    blockId: DirectoryBlockId,
+    blockLength: DataFileBlockLength,
+    data: DataInput,
+    formatEntry: (Pair<Int, Int>) -> String = { (container, offset) -> "Container: $container, Offset: $offset" }
+) {
     println("Block: $blockId, Länge: $blockLength")
 
-    val roomCount = data.readShortLittleEndian().toInt()
-    println("Anzahl Räume: ${roomCount}")
+    val itemCount = data.readShortLittleEndian().toInt()
+    println("Anzahl: $itemCount")
 
-    repeat(roomCount) {
-        val roomNumber = data.readByte().toInt()
-        println("Raumnummer: $roomNumber")
+    val containers = buildList(itemCount) {
+        repeat(itemCount) { add(data.readUnsignedByte()) }
     }
 
-    repeat(roomCount) {
-        val roomOffset = data.readIntLittleEndian()
-        println("Raumoffset: $roomOffset")
+    val offsets = buildList(itemCount) {
+        repeat(itemCount) { add(data.readIntLittleEndian()) }
     }
+
+    containers.zip(offsets).forEachIndexed { idx, entry -> println("$idx ${formatEntry(entry)}") }
+}
+
+val drooBlockHandler = { blockId: DirectoryBlockId, blockLength: DataFileBlockLength, data: DataInput ->
+    defaultDumpDirectoryBlock(blockId, blockLength, data)
 }
 
 val dscrBlockHandler = { blockId: DirectoryBlockId, blockLength: DataFileBlockLength, data: DataInput ->
-    println("Block: $blockId, Länge: $blockLength")
-
-    val scriptCount = data.readShortLittleEndian().toInt()
-    println("Anzahl Scripts: ${scriptCount}")
-
-    repeat(scriptCount) {
-        val roomNumber = data.readByte().toInt()
-        println("Raumnummer: $roomNumber")
-    }
-
-    repeat(scriptCount) {
-        val roomOffset = data.readIntLittleEndian()
-        println("Raumoffset: $roomOffset")
-    }
+    defaultDumpDirectoryBlock(blockId, blockLength, data)
 }
 
-val defaultGlobDirBlockHandler = { blockId: DirectoryBlockId, blockLength: DataFileBlockLength, data: DataInput ->
-    println("Block: $blockId, Länge: $blockLength")
-
-    val itemCount = data.readShortLittleEndian().toInt()
-    println("Anzahl: ${itemCount}")
-
-    repeat(itemCount) {
-        val roomNumber = data.readByte().toInt()
-        println("Raumnummer: $roomNumber")
-    }
-
-    repeat(itemCount) {
-        val roomOffset = data.readIntLittleEndian()
-        println("Raumoffset: $roomOffset")
-    }
+val defaultGlobDirBlockHandler: DirBlockHandler = { blockId: DirectoryBlockId, blockLength: DataFileBlockLength, data: DataInput ->
+    defaultDumpDirectoryBlock(blockId, blockLength, data)
 }
 
 val dobjBlockHandler = { blockId: DirectoryBlockId, blockLength: DataFileBlockLength, data: DataInput ->
-    println("Block: $blockId, Länge: $blockLength")
-
-    val itemCount = data.readShortLittleEndian().toInt()
-    println("Anzahl: ${itemCount}")
-
-    repeat(itemCount) {
-        val objectOwnerState = data.readByte().toInt()
-        println("object owner/state: $objectOwnerState")
-    }
-
-    repeat(itemCount) {
-        val objectClass = data.readIntLittleEndian()
-        println("Raumoffset: $objectClass")
-    }
+    defaultDumpDirectoryBlock(
+        blockId,
+        blockLength,
+        data,
+        { (ownerState, klass) -> "Owner/State: $ownerState, Class: 0x${klass.toHexString()}" }
+    )
 }
 
 
