@@ -358,11 +358,10 @@ fun readCharBlock(path: Path): CharBlock? {
 }
 
 fun writeEmptyDirFile(dirFile: File) {
-    val maximums = Maximums(charsetCount = 3u)
 
     DataOutputStream(XorOutputStream(FileOutputStream(dirFile))).use {
 //        it.writeDummyRnamBlock()
-        it.writeMaxsBlock(maximums)
+        it.writeMaxsBlock()
         it.writeDummyDrooBlock()
         it.writeDummyDscrBlock()
 //        it.writeEmptyBlock(DirectoryBlockId.DSOU)
@@ -419,8 +418,7 @@ private fun DataOutputStream.writeDummyDobjBlock() {
 }
 
 private fun DataOutputStream.writeDummyRnamBlock() {
-    val blockIdBytes = DirectoryBlockId.RNAM.name.toByteArray()
-    write(blockIdBytes, 0, 4)
+    DirectoryBlockId.RNAM.blockId4.writeTo(this)
     writeInt(9)     // total length including block ID, length itself and end marker
     writeByte(0)   // end marker
 }
@@ -430,8 +428,7 @@ private fun DataOutput.writeBlockId(blockId: BlockId4) {
 }
 
 private fun DataOutput.writeBlockId(blockId: DirectoryBlockId) {
-    val blockIdBytes = blockId.name.toByteArray()
-    write(blockIdBytes, 0, 4)
+    blockId.blockId4.writeTo(this)
 }
 
 data class RoomNumberAndOffset(val roomNumber: Byte, val offset: Int)
@@ -452,30 +449,38 @@ private fun DataOutput.writeGenericDirectoryBlock(
 }
 
 fun DataOutputStream.writeEmptyBlock(blockId: DirectoryBlockId) {
-    val blockIdBytes = blockId.name.toByteArray()
-    write(blockIdBytes, 0, 4)
+    val blockIdBytes = blockId.blockId4.writeTo(this)
     writeInt(10)
     writeShort(0)
 }
 
-data class Maximums(val charsetCount: UInt)
+//data class Maximums(val charsetCount: UInt)
 
-/**
- * Für MI2 scheinen 9 Words Daten erwartet zu werden
- */
-fun DataOutputStream.writeMaxsBlock(maximums: Maximums) {
+fun DataOutput.writeMaxsBlock() {
+    val maximums = Maximums(
+        varCount = ResourceCount(600),
+        unknown1 = ResourceCount(0x8001),
+        bitVarCount = ResourceCount(777),
+        localObjCount = ResourceCount(200),
+        unknown2 = ResourceCount(0x8002),
+        charsetCount = ResourceCount(3),
+        unknown3 = ResourceCount(0x8003),
+        unknown4 = ResourceCount(0x8004),
+        inventoryCount = ResourceCount(1)
+    )
+
     writeBlockId(DirectoryBlockId.MAXS)
     writeInt(26)
 
-    writeShortLittleEndian(600)                            // vars
-    writeShortLittleEndian(0x8001.toShort())                    // unknown
-    writeShortLittleEndian(777)                           // bit vars
-    writeShortLittleEndian(200)                           // local objs
-    writeShortLittleEndian(0x8002.toShort())                    // unknown
-    writeShortLittleEndian(maximums.charsetCount.toShort())     // charsets
-    writeShortLittleEndian(0x8003.toShort())                    // unknown
-    writeShortLittleEndian(0x8004.toShort())                    // unknown
-    writeShortLittleEndian(1)                    // inventory
+    writeShortLittleEndian(maximums.varCount.value.toShort())
+    writeShortLittleEndian(maximums.unknown1.value.toShort())
+    writeShortLittleEndian(maximums.bitVarCount.value.toShort())
+    writeShortLittleEndian(maximums.localObjCount.value.toShort())
+    writeShortLittleEndian(maximums.unknown2.value.toShort())
+    writeShortLittleEndian(maximums.charsetCount.value.toShort())
+    writeShortLittleEndian(maximums.unknown3.value.toShort())
+    writeShortLittleEndian(maximums.unknown4.value.toShort())
+    writeShortLittleEndian(maximums.inventoryCount.value.toShort())
 }
 
 fun DataOutputStream.writeDummyDrooBlock() {
@@ -510,8 +515,7 @@ fun DataOutputStream.writeDummyDscrBlock() {
 //        RoomNumberAndOffset(3, 22)
 //    )
 
-    val blockIdBytes = DirectoryBlockId.DSCR.name.toByteArray()
-    write(blockIdBytes, 0, 4)
+    DirectoryBlockId.DSCR.blockId4.writeTo(this)
 
     writeInt(8 + 2 + 5 * infos.size)    // 8 Bytes Header und 1 Word für Anzahl
 

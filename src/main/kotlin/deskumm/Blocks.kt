@@ -27,7 +27,13 @@ data class BlockId4(val name: String) {
     }
 
     companion object {
-        fun readFrom(input: DataInput, xorCode: Byte = 0): BlockId4 {
+        fun readFrom(input: DataInput): BlockId4 {
+            val buffer = ByteArray(4)
+            input.readFully(buffer)
+            return BlockId4(buffer)
+        }
+
+        fun readFrom(input: DataInput, xorCode: Byte): BlockId4 {
             val buffer = ByteArray(4)
             input.readFully(buffer)
 
@@ -70,9 +76,15 @@ data class BlockHeaderV5(val blockId: BlockId4, val blockLength: BlockLengthV5) 
     companion object {
         const val BLOCK_HEADER_BYTE_COUNT = 8
 
-        fun readFrom(input: DataInput, xorCode: Byte = 0): BlockHeaderV5 {
-            val blockId = BlockId4.readFrom(input, xorCode)
+        fun readFrom(input: DataInput): BlockHeaderV5 {
+            val blockId = BlockId4.readFrom(input)
             val blockLength = BlockLengthV5(input.readInt())
+            return BlockHeaderV5(blockId, blockLength)
+        }
+
+        fun readFrom(input: DataInput, xorCode: Byte): BlockHeaderV5 {
+            val blockId = BlockId4.readFrom(input, xorCode)
+            val blockLength = BlockLengthV5(input.readInt().xor(xorInt(xorCode)))
             return BlockHeaderV5(blockId, blockLength)
         }
     }
