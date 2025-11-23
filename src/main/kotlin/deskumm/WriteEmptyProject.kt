@@ -15,9 +15,8 @@ class WriteEmptyProjectCommand : CliktCommand() {
 
     override fun run() {
         writeEmptyDirFile(File("$baseName.000"))
-//    writeEmptyDataFile(File("$baseName.001"))
 
-        writeDummyLecfFileForCharset(Paths.get("$baseName.001"))
+        writeDummyLecfFileForCharset(Paths.get("$baseName.002"))
         writeDummyLecfFileForRoomAndScript(Paths.get("$baseName.004"))
         writeDummyLecfFileForScript(Paths.get("$baseName.005"))
     }
@@ -25,17 +24,12 @@ class WriteEmptyProjectCommand : CliktCommand() {
 
 fun writeDummyLecfFileForRoomAndScript(path: Path) {
     val lecfBlock = LecfBlock(listOf(
-        RoomAndOffset(1, 397),
-        RoomAndOffset(7, 397)
+        RoomAndOffset(1, 27),
+        RoomAndOffset(113, 27)
     ))
 
     DataOutputStream(XorOutputStream(FileOutputStream(path.toFile()))).use { out ->
         lecfBlock.writeTo(out)
-
-        val bytes = ByteArrayOutputStream()
-        DataOutputStream(bytes).use { emitDummyScriptBytes(it) }
-        val scrpBlock = ScrpBlockV5(bytes.toByteArray())
-        scrpBlock.writeTo(out)
 
         FileInputStream(Paths.get("data/ROOM/dummy.ROOM").toFile()).use { it.copyTo(out) }
 //        FileInputStream(Paths.get("data/ROOM/mi2_7_397860.ROOM").toFile()).use { it.copyTo(out) }
@@ -43,6 +37,11 @@ fun writeDummyLecfFileForRoomAndScript(path: Path) {
         FileInputStream(Paths.get("data/CHAR/2.CHAR").toFile()).use { it.copyTo(out) }
 
         FileInputStream(Paths.get("data/COST/mi2_142_room7_590264.COST").toFile()).use { it.copyTo(out) }
+
+        val bytes = ByteArrayOutputStream()
+        DataOutputStream(bytes).use { emitDummyScriptBytes(it) }
+        val scrpBlock = ScrpBlockV5(bytes.toByteArray())
+        scrpBlock.writeTo(out)
     }
 }
 
@@ -98,12 +97,6 @@ fun writeDummyLecfFileForScript(path: Path) {
 }
 
 fun emitDummyScriptBytes(dataOut: DataOutput) {
-    listOf(1, 1).map { ImmediateByteParam(it) }.forEach { roomParam ->
-        LockRoomInstr(roomParam).emitBytes(dataOut)
-        LoadRoomInstr(roomParam).emitBytes(dataOut)
-        CurrentRoomInstr(roomParam).emitBytes(dataOut)
-    }
-
     // set-screen 16 to 144
     dataOut.write(byteArrayOf(0x33, 0x03))
     ImmediateWordParam(16).emitBytes(dataOut)
@@ -118,6 +111,14 @@ fun emitDummyScriptBytes(dataOut: DataOutput) {
     ImmediateByteParam(1).emitBytes(dataOut)
 
         emitBytesForBannerColorString(dataOut)
+
+    AssignLiteralToStringInstr(ImmediateByteParam(4), ScummStringBytesV5.from("pause-text: leertaste etc. pp.")).emitBytes(dataOut)
+
+    listOf(/*1,*/ 5).map { ImmediateByteParam(it) }.forEach { roomParam ->
+        LockRoomInstr(roomParam).emitBytes(dataOut)
+        LoadRoomInstr(roomParam).emitBytes(dataOut)
+        CurrentRoomInstr(roomParam).emitBytes(dataOut)
+    }
 
     EndScriptInstr.emitBytes(dataOut)
 //        dataOut.write(CursonOnEmit.bytes())
@@ -373,8 +374,8 @@ fun writeEmptyDirFile(dirFile: File) {
             // erster eintrag ist dummy
             DummyRoomNumberAndOffset,
 
-            RoomNumberAndOffset(2, 22),
-            RoomNumberAndOffset(1, 75677 - 397),
+            RoomNumberAndOffset(4, 151789),
+            RoomNumberAndOffset(1, 75723 - 397),
         )
         it.writeGenericDirectoryBlock(DirectoryBlockId.DCHR, charsetInfo)
         it.writeDummyDobjBlock()
@@ -383,8 +384,19 @@ fun writeEmptyDirFile(dirFile: File) {
 
 fun costumeInfos(): List<RoomNumberAndOffset> {
     return List(143) { idx ->
-        if (idx == 142 || idx == 20 || idx == 12) {
-            RoomNumberAndOffset(7, 80303 - 397)
+        if (idx == 1) {
+            RoomNumberAndOffset(4, 117285)
+        }
+        else if (idx == 27) {
+            // 27 Container: 4, Offset: 145250
+            RoomNumberAndOffset(4, 145250)
+        }
+        else if (idx == 32) {
+            // 32 Container: 5, Offset: 37818
+            RoomNumberAndOffset(5, 37818)
+        }
+        else if (idx == 142 || idx == 20 || idx == 12) {
+            RoomNumberAndOffset(7, 192404)
         } else {
             RoomNumberAndOffset(0, 0)
         }
@@ -469,17 +481,11 @@ fun DataOutputStream.writeMaxsBlock(maximums: Maximums) {
 fun DataOutputStream.writeDummyDrooBlock() {
     writeBlockId(DirectoryBlockId.DROO)
 
-    val entries = listOf(
-        DummyRoomNumberAndOffset,
-        RoomNumberAndOffset(4, 22),
-        RoomNumberAndOffset(1, 0),
-        RoomNumberAndOffset(4, 22),
-        RoomNumberAndOffset(1, 0),
-        RoomNumberAndOffset(4, 22),
-        RoomNumberAndOffset(4, 22),
-        RoomNumberAndOffset(4, 22),
-        RoomNumberAndOffset(4, 22),
-    )
+    val entries = List(114) {
+        if (it == 0) return@List DummyRoomNumberAndOffset
+        else if (it == 113) return@List RoomNumberAndOffset(4, 0)
+        else return@List RoomNumberAndOffset(1, 0)
+    }
 
     val numEntries = entries.size
 
@@ -495,7 +501,8 @@ fun DataOutputStream.writeDummyDrooBlock() {
 fun DataOutputStream.writeDummyDscrBlock() {
     val infos = List(17, {
         if (it == 0) return@List DummyRoomNumberAndOffset
-        else if (it == 1) return@List RoomNumberAndOffset(3, 27)
+        else if (it == 1) return@List RoomNumberAndOffset(113, 81488 - 27)
+        else if (it == 111) return@List RoomNumberAndOffset(82, 57103)
         else return@List RoomNumberAndOffset(it.toByte(), it)
     })
 //        val infos = listOf(

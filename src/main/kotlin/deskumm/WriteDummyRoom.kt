@@ -275,9 +275,12 @@ fun dummyEntryCodeBytes(): ByteArray {
 
         DebugInstr(ImmediateWordParam(1177)).emitBytes(out)
 
+        AssignValueInstr(ResultVar(GlobalVarSpec(43)), ImmediateWordParam(32))  // pause-key
+
         emitString44(out)
 
-        AssignLiteralToStringInstr(ImmediateByteParam(6), ScummStringBytesV5.from("string 6"))
+        AssignLiteralToStringInstr(ImmediateByteParam(6), ScummStringBytesV5.from("string 6")).emitBytes(out)
+        AssignLiteralToStringInstr(ImmediateByteParam(4), ScummStringBytesV5.from("pause-text: leertaste etc. pp.")).emitBytes(out)
 
         emitBytesForBannerColorString(out)
 
@@ -307,7 +310,7 @@ fun dummyEntryCodeBytes(): ByteArray {
 
         DoAnimationInstr(actorParam, ImmediateByteParam(250)).emitBytes(out)
 
-        val costumeParam = ImmediateByteParam(142)
+        val costumeParam = ImmediateByteParam(1)
 
         LockCostumeInstr(costumeParam).emitBytes(out)
         LoadCostumeInstr(costumeParam).emitBytes(out)
