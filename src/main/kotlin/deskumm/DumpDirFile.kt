@@ -5,9 +5,14 @@ import com.github.ajalt.clikt.core.main
 import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
+import com.github.ajalt.clikt.parameters.options.optionalValueLazy
 import com.github.ajalt.clikt.parameters.types.file
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import java.io.*
+import java.nio.file.Paths
 import kotlin.experimental.xor
 
 private val log = KotlinLogging.logger {}
@@ -16,7 +21,8 @@ fun main(args: Array<String>) = DumpDirFileCommand().main(args)
 
 class DumpDirFileCommand : CliktCommand() {
     val sourcePath by argument(name = "source-path", help = "Source path").file(mustExist = true, canBeDir = false)
-    val dumpAsJson by option("--dump-as-json", help = "Dump as JSON").flag(default = false)
+    val dumpAsJson by option("--dump-as-json", help = "Dump as JSON").file(mustExist = false, canBeDir = false)
+        .optionalValueLazy { Paths.get(sourcePath.parent, "${sourcePath.nameWithoutExtension}.json").toFile() }
     val dumpRoomNames by option("--dump-room-names", help = "Dump room names").flag(default = false)
     val dumpMaximums by option("--dump-maximums", help = "Dump maximums").flag(default = false)
     val dumpRoomEntries by option("--dump-room-entries", help = "Dump room entries").flag(default = false)
@@ -46,29 +52,7 @@ class DumpDirFileCommand : CliktCommand() {
         }
 
         val maxsBlockHandler = { blockId: BlockId4, blockLength: DataFileBlockLength, data: DataInput ->
-            val varCount = data.readShortLittleEndian().toInt()
-            val unknown1 = data.readShortLittleEndian().toInt()
-            val bitVarCount = data.readShortLittleEndian().toInt()
-            val localObjCount = data.readShortLittleEndian().toInt()
-            val unknown2 = data.readShortLittleEndian().toInt()
-            val charsetCount = data.readShortLittleEndian().toInt()
-            val unknown3 = data.readShortLittleEndian().toInt()
-            val unknown4 = data.readShortLittleEndian().toInt()
-            val inventoryCount = data.readShortLittleEndian().toInt()
-
-            val maximums = Maximums(
-                ResourceCount(varCount),
-                ResourceCount(unknown1),
-                ResourceCount(bitVarCount),
-                ResourceCount(localObjCount),
-                ResourceCount(unknown2),
-                ResourceCount(charsetCount),
-                ResourceCount(unknown3),
-                ResourceCount(unknown4),
-                ResourceCount(inventoryCount)
-            )
-
-            builder.maximums(maximums)
+            builder.maximums(MaximumsV5.readFrom(data))
         }
 
         ScummDirFileV5(sourcePath).use {
@@ -92,20 +76,27 @@ class DumpDirFileCommand : CliktCommand() {
         }
 
         val directory = builder.build()
-        val dumper = if (dumpAsJson) { DirectoryDumper.JsonDirectoryDumper } else { DirectoryDumper.TextDirectoryDumper }
 
-        dumper.dump(
-            directory, DirectoryDumper.Options(
-                dumpRoomNames,
-                dumpMaximums,
-                dumpRoomEntries,
-                dumpScriptEntries,
-                dumpSoundEntries,
-                dumpCostumeEntries,
-                dumpCharsetEntries,
-                dumpObjectEntries
-            )
+        val options = DirectoryDumper.Options(
+            dumpRoomNames,
+            dumpMaximums,
+            dumpRoomEntries,
+            dumpScriptEntries,
+            dumpSoundEntries,
+            dumpCostumeEntries,
+            dumpCharsetEntries,
+            dumpObjectEntries
         )
+
+        if (dumpAsJson != null) {
+            log.debug { "Dumping directory as JSON to ${dumpAsJson!!.absolutePath}" }
+
+            PrintStream(dumpAsJson!!.outputStream()).use { printStream ->
+                DirectoryDumper.JsonDirectoryDumper.dump(directory, options, printStream)
+            }
+        } else {
+            DirectoryDumper.TextDirectoryDumper.dump(directory, options, System.out)
+        }
     }
 
 }
@@ -122,53 +113,161 @@ sealed interface DirectoryDumper {
         val dumpObjectEntries: Boolean = false
     )
 
-    fun dump(directory: DirectoryV5, options: Options)
+    fun dump(directory: DirectoryV5, options: Options, printStream: PrintStream)
 
     object TextDirectoryDumper : DirectoryDumper {
-        override fun dump(directory: DirectoryV5, options: Options) {
+        override fun dump(directory: DirectoryV5, options: Options, printStream: PrintStream) {
             if (options.dumpRoomNames) {
-                println("Room names (#: ${directory.roomNames.value.size}):")
-                directory.roomNames.value.forEach { (room, name) -> println("$room: $name") }
+                printStream.println("Room names (#: ${directory.roomNames.value.size}):")
+                directory.roomNames.value.forEach { (room, name) -> printStream.println("$room: $name") }
             }
 
             if (options.dumpMaximums) {
-                // TODO
+                printStream.println("Maximums:")
+                printStream.println("  Var count: ${directory.maximums.varCount.value}")
+                printStream.println("  Unknown 1: ${directory.maximums.unknown1.value}")
+                printStream.println("  Bit var count: ${directory.maximums.bitVarCount.value}")
+                printStream.println("  Local obj count: ${directory.maximums.localObjCount.value}")
+                printStream.println("  Unknown 2: ${directory.maximums.unknown2.value}")
+                printStream.println("  Charset count: ${directory.maximums.charsetCount.value}")
+                printStream.println("  Unknown 3: ${directory.maximums.unknown3.value}")
+                printStream.println("  Unknown 4: ${directory.maximums.unknown4.value}")
+                printStream.println("  Inventory count: ${directory.maximums.inventoryCount.value}")
             }
 
             if (options.dumpRoomEntries) {
-                println("Room entries (#: ${directory.roomEntries.value.size}):")
-                directory.roomEntries.value.forEachIndexed { idx, (container, offset) -> println("$idx Container: $container, Offset: $offset") }
+                printStream.println("Room entries (#: ${directory.roomEntries.value.size}):")
+                directory.roomEntries.value.forEachIndexed { idx, (container, offset) -> printStream.println("$idx Container: $container, Offset: $offset") }
             }
 
             if (options.dumpScriptEntries) {
-                println("Script entries (#: ${directory.scriptEntries.value.size}):")
-                directory.scriptEntries.value.forEachIndexed { idx, (container, offset) -> println("$idx Container: $container, Offset: $offset") }
+                printStream.println("Script entries (#: ${directory.scriptEntries.value.size}):")
+                directory.scriptEntries.value.forEachIndexed { idx, (container, offset) -> printStream.println("$idx Container: $container, Offset: $offset") }
             }
 
             if (options.dumpSoundEntries) {
-                println("Sound entries (#: ${directory.soundEntries.value.size}):")
-                directory.soundEntries.value.forEachIndexed { idx, (container, offset) -> println("$idx Container: $container, Offset: $offset") }
+                printStream.println("Sound entries (#: ${directory.soundEntries.value.size}):")
+                directory.soundEntries.value.forEachIndexed { idx, (container, offset) -> printStream.println("$idx Container: $container, Offset: $offset") }
             }
+
             if (options.dumpCostumeEntries) {
-                println("Costume entries (#: ${directory.costumeEntries.value.size}):")
-                directory.costumeEntries.value.forEachIndexed { idx, (container, offset) -> println("$idx Container: $container, Offset: $offset") }
+                printStream.println("Costume entries (#: ${directory.costumeEntries.value.size}):")
+                directory.costumeEntries.value.forEachIndexed { idx, (container, offset) -> printStream.println("$idx Container: $container, Offset: $offset") }
             }
 
             if (options.dumpCharsetEntries) {
-                println("Charset entries (#: ${directory.charsetEntries.value.size}):")
-                directory.charsetEntries.value.forEachIndexed { idx, (container, offset) -> println("$idx Container: $container, Offset: $offset") }
+                printStream.println("Charset entries (#: ${directory.charsetEntries.value.size}):")
+                directory.charsetEntries.value.forEachIndexed { idx, (container, offset) -> printStream.println("$idx Container: $container, Offset: $offset") }
             }
 
             if (options.dumpObjectEntries) {
-                println("Object entries (#: ${directory.objectEntries.value.size}):")
-                directory.objectEntries.value.forEachIndexed { idx, (ownerState, klass) -> println("$idx Owner/State: $ownerState, Class: 0x${klass.toHexString()}") }
+                printStream.println("Object entries (#: ${directory.objectEntries.value.size}):")
+                directory.objectEntries.value.forEachIndexed { idx, (ownerState, klass) -> printStream.println("$idx Owner/State: $ownerState, Class: 0x${klass.toHexString()}") }
             }
         }
     }
 
     object JsonDirectoryDumper : DirectoryDumper {
-        override fun dump(directory: DirectoryV5, options: Options) {
-            TODO("Not yet implemented")
+        override fun dump(directory: DirectoryV5, options: Options, printStream: PrintStream) {
+            val model = DirectoryModel.from(directory)
+            val json = Json { prettyPrint = true }
+            val jsonString = json.encodeToString(model)
+            printStream.println(jsonString)
+        }
+
+        @Serializable
+        data class DirectoryModel(
+            val roomNames: Map<Int, String>,
+            val maximums: MaximumsV5,
+            val rooms: Map<Int, GenericEntry>,
+            val scripts: Map<Int, GenericEntry>,
+            val sounds: Map<Int, GenericEntry>,
+            val costumes: Map<Int, GenericEntry>,
+            val charsets: Map<Int, GenericEntry>,
+            val objects: Map<Int, ObjectEntry>
+        ) {
+            fun toDirectory(): DirectoryV5 {
+                return DirectoryV5(
+                    RoomNames(roomNames),
+                    maximums,
+                    RoomEntries(toListOfContainerAndOffset(rooms)),
+                    ScriptEntries(toListOfContainerAndOffset(scripts)),
+                    SoundEntries(toListOfContainerAndOffset(sounds)),
+                    CostumeEntries(toListOfContainerAndOffset(costumes)),
+                    CharsetEntries(toListOfContainerAndOffset(charsets)),
+                    ObjectEntries(toListOfOwnerStateAndClass(objects))
+                )
+            }
+
+            private fun toListOfOwnerStateAndClass(entries: Map<Int, ObjectEntry>): List<OwnerStateAndClass> {
+                val maxId = entries.maxOf { it.key }
+                val dummy = OwnerStateAndClass(0, 0)
+                val list = MutableList(maxId + 1) { dummy }
+                entries.forEach { (idx, entry) -> list[idx] = entry.toOnwerStateAndClass() }
+                return list
+            }
+
+            private fun toListOfContainerAndOffset(entries: Map<Int, GenericEntry>): List<ContainerAndOffset> {
+                val maxId = entries.maxOf { it.key }
+                val dummy = ContainerAndOffset(0, 0)
+                val list = MutableList(maxId + 1) { dummy }
+                entries.forEach { (idx, entry) -> list[idx] = entry.toContainerAndOffset() }
+                return list
+            }
+
+            @Serializable
+            data class GenericEntry(val container: Int, val offset: Int) {
+                companion object {
+                    fun from(containerAndOffset: ContainerAndOffset): GenericEntry {
+                        return GenericEntry(containerAndOffset.container, containerAndOffset.offset)
+                    }
+                }
+
+                fun toContainerAndOffset(): ContainerAndOffset {
+                    return ContainerAndOffset(container, offset)
+                }
+            }
+
+            @Serializable
+            data class ObjectEntry(val ownerState: Int, val klass: Int) {
+                fun toOnwerStateAndClass(): OwnerStateAndClass {
+                    return OwnerStateAndClass(ownerState, klass)
+                }
+
+                companion object {
+                    fun from(ownerStateAndClass: OwnerStateAndClass): ObjectEntry {
+                        return ObjectEntry(ownerStateAndClass.ownerState, ownerStateAndClass.klass)
+                    }
+                }
+            }
+
+            companion object {
+                fun mapGenericEntryByIndex(entries: List<ContainerAndOffset>): Map<Int, GenericEntry> {
+                    return entries.mapIndexed { idx, containerAndOffset ->
+                        idx to GenericEntry.from(containerAndOffset)
+                    }.toMap()
+                }
+
+                fun from(directory: DirectoryV5): DirectoryModel {
+                    val roomEntryByIndex = mapGenericEntryByIndex(directory.roomEntries.value)
+                    val scriptEntryByIndex = mapGenericEntryByIndex(directory.scriptEntries.value)
+                    val soundEntryByIndex = mapGenericEntryByIndex(directory.soundEntries.value)
+                    val costumeEntryByIndex = mapGenericEntryByIndex(directory.costumeEntries.value)
+                    val charsetEntryByIndex = mapGenericEntryByIndex(directory.charsetEntries.value)
+                    val objectEntryByIndex = directory.objectEntries.value.mapIndexed { idx, ownerStateAndClass -> idx to ObjectEntry.from(ownerStateAndClass) }.toMap()
+
+                    return DirectoryModel(
+                        directory.roomNames.value,
+                        directory.maximums,
+                        roomEntryByIndex,
+                        scriptEntryByIndex,
+                        soundEntryByIndex,
+                        costumeEntryByIndex,
+                        charsetEntryByIndex,
+                        objectEntryByIndex
+                    )
+                }
+            }
         }
     }
 }
@@ -184,7 +283,12 @@ class ScummDirFileV5(path: File) : Closeable {
 sealed interface DirectoryBlockId {
     val blockId4: BlockId4
 
-    abstract class BlockIdBase(override val blockId4: BlockId4) : DirectoryBlockId
+    abstract class BlockIdBase(override val blockId4: BlockId4) : DirectoryBlockId {
+        fun writeTo(dataOutput: DataOutput) {
+            blockId4.writeTo(dataOutput)
+        }
+    }
+
     object RNAM : BlockIdBase(BlockId4("RNAM"))
     object MAXS : BlockIdBase(BlockId4("MAXS"))
     object DROO : BlockIdBase(BlockId4("DROO"))
@@ -284,23 +388,48 @@ object DobjHandler : NewDirBlockHandler {
 
 data class DirectoryV5(
     val roomNames: RoomNames,
-    val maximums: Maximums,
+    val maximums: MaximumsV5,
     val roomEntries: RoomEntries,
     val scriptEntries: ScriptEntries,
     val soundEntries: SoundEntries,
     val costumeEntries: CostumeEntries,
     val charsetEntries: CharsetEntries,
     val objectEntries: ObjectEntries
-)
+) {
+    init {
+        require(roomNames.value.size <= roomEntries.value.size) {
+            val roomNamesCount = roomNames.value.size
+            val roomEntriesCount = roomEntries.value.size
+            "Room names count ($roomNamesCount) must not exceed room entries count ($roomEntriesCount)"
+        }
+
+        require(maximums.charsetCount.value == charsetEntries.value.size) {
+            val charsetCountMaximum = maximums.charsetCount.value
+            val charsetEntriesCount = charsetEntries.value.size
+            "Charset count maximum ($charsetCountMaximum) must match charset entries count ($charsetEntriesCount)" }
+    }
+}
 
 @JvmInline
+@Serializable
 value class ResourceCount(val value: Int) {
     init {
         require(value >= 0) { "Resource count must be >= 0" }
     }
+
+    fun writeTo(dataOutput: DataOutput) {
+        dataOutput.writeShortLittleEndian(value.toShort())
+    }
+
+    companion object {
+        fun readFrom(dataInput: DataInput): ResourceCount {
+            return ResourceCount(dataInput.readShortLittleEndian().toInt())
+        }
+    }
 }
 
-data class Maximums(
+@Serializable
+data class MaximumsV5(
     val varCount: ResourceCount,
     val unknown1: ResourceCount,
     val bitVarCount: ResourceCount,
@@ -310,10 +439,66 @@ data class Maximums(
     val unknown3: ResourceCount,
     val unknown4: ResourceCount,
     val inventoryCount: ResourceCount
-)
+) {
+    fun writeTo(dataOutput: DataOutput) {
+        varCount.writeTo(dataOutput)
+        unknown1.writeTo(dataOutput)
+        bitVarCount.writeTo(dataOutput)
+        localObjCount.writeTo(dataOutput)
+        unknown2.writeTo(dataOutput)
+        charsetCount.writeTo(dataOutput)
+        unknown3.writeTo(dataOutput)
+        unknown4.writeTo(dataOutput)
+        inventoryCount.writeTo(dataOutput)
+    }
+
+    companion object {
+        fun readFrom(dataInput: DataInput): MaximumsV5 {
+            val varCount = dataInput.readShortLittleEndian().toInt()
+            val unknown1 = dataInput.readShortLittleEndian().toInt()
+            val bitVarCount = dataInput.readShortLittleEndian().toInt()
+            val localObjCount = dataInput.readShortLittleEndian().toInt()
+            val unknown2 = dataInput.readShortLittleEndian().toInt()
+            val charsetCount = dataInput.readShortLittleEndian().toInt()
+            val unknown3 = dataInput.readShortLittleEndian().toInt()
+            val unknown4 = dataInput.readShortLittleEndian().toInt()
+            val inventoryCount = dataInput.readShortLittleEndian().toInt()
+
+            val maximums = MaximumsV5(
+                ResourceCount(varCount),
+                ResourceCount(unknown1),
+                ResourceCount(bitVarCount),
+                ResourceCount(localObjCount),
+                ResourceCount(unknown2),
+                ResourceCount(charsetCount),
+                ResourceCount(unknown3),
+                ResourceCount(unknown4),
+                ResourceCount(inventoryCount)
+            )
+
+            return maximums
+        }
+    }
+}
 
 @JvmInline
-value class RoomNames(val value: Map<Int, String>)
+value class RoomNames(val value: Map<Int, String>) {
+    val hasAnyRoomNames: Boolean get() = value.isNotEmpty()
+
+    fun writeXorEncodedTo(dataOutput: DataOutput, xorCode: Byte) {
+        value.forEach { (room, name) ->
+            dataOutput.writeByte(room)
+
+            val buffer = ByteArray(9) { _ -> 0 }
+            val endIndex = minOf(name.length, 9)
+            name.toByteArray(charset = Charsets.US_ASCII).copyInto(buffer, 0, 0, endIndex)
+            for (i in buffer.indices) { buffer[i] = buffer[i].xor(xorCode) }
+            dataOutput.write(buffer, 0, 9)
+        }
+
+        dataOutput.writeByte(0)
+    }
+}
 
 @JvmInline
 value class RoomEntries(val value: List<ContainerAndOffset>)
@@ -334,7 +519,7 @@ value class CharsetEntries(val value: List<ContainerAndOffset>)
 value class ObjectEntries(val value: List<OwnerStateAndClass>)
 
 class DirectoryBuilder {
-    var maximums: Maximums? = null
+    var maximums: MaximumsV5? = null
     val roomNames = mutableMapOf<Int, String>()
     var roomEntries: List<ContainerAndOffset> = emptyList()
     var scriptEntries: List<ContainerAndOffset> = emptyList()
@@ -343,7 +528,7 @@ class DirectoryBuilder {
     var charsetEntries: List<ContainerAndOffset> = emptyList()
     var objectEntries: List<OwnerStateAndClass> = emptyList()
 
-    fun maximums(maximums: Maximums) {
+    fun maximums(maximums: MaximumsV5) {
         this.maximums = maximums
     }
 
@@ -406,7 +591,11 @@ fun defaultDumpDirectoryBlock(
     entries.forEachIndexed { idx, entry -> println("$idx ${formatEntry(entry)}") }
 }
 
-data class ContainerAndOffset(val container: Int, val offset: Int)
+data class ContainerAndOffset(val container: Int, val offset: Int) {
+    fun writeTo(dataOutput: DataOutput) {
+        TODO("Not yet implemented")
+    }
+}
 
 data class OwnerStateAndClass(val ownerState: Int, val klass: Int)
 

@@ -457,7 +457,7 @@ fun DataOutputStream.writeEmptyBlock(blockId: DirectoryBlockId) {
 //data class Maximums(val charsetCount: UInt)
 
 fun DataOutput.writeMaxsBlock() {
-    val maximums = Maximums(
+    val maximums = MaximumsV5(
         varCount = ResourceCount(600),
         unknown1 = ResourceCount(0x8001),
         bitVarCount = ResourceCount(777),

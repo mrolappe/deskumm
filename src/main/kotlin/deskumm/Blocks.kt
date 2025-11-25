@@ -78,6 +78,7 @@ data class BlockHeaderV5(val blockId: BlockId4, val blockLength: BlockLengthV5) 
 
         fun readFrom(input: DataInput): BlockHeaderV5 {
             val blockId = BlockId4.readFrom(input)
+            logger.debug { "read block ID $blockId" }
             val blockLength = BlockLengthV5(input.readInt())
             return BlockHeaderV5(blockId, blockLength)
         }
@@ -117,6 +118,7 @@ class RawBlockV5(override val blockId: BlockId4, val content: ByteArray) : Block
             return RawBlockV5(blockHeader.blockId, content)
         }
     }
+
     override fun writeTo(out: DataOutput) {
         val length = 8 + content.size
         blockId.writeTo(out)
