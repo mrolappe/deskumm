@@ -261,26 +261,15 @@ private fun clutBlock(clutFile: Path?): RawBlockV5 {
 fun dummyEntryCodeBytes(): ByteArray {
     val baos = ByteArrayOutputStream()
 
-//    val printInstr = PrintInstr(
-//        ImmediateByteParam(0xfd),
-//        listOf(PrintInstr.Text(ScummStringBytesV5("entry code in da house".toByteArray() + byteArrayOf(0))))
-//    )
-
     DataOutputStream(baos).use { out ->
-//       emitDummyScriptBytes(dataOut)
-
-//        CursonOnEmit.bytes().let { dataOut.write(it) }
-//        CursorSoftOnEmit.bytes().let { dataOut.write(it) }
-//        UserPutOnEmit.bytes().let { dataOut.write(it) }
-
         DebugInstr(ImmediateWordParam(1177)).emitBytes(out)
 
-        AssignValueInstr(ResultVar(GlobalVarSpec(43)), ImmediateWordParam(32))  // pause-key
+//        AssignValueToVarInstr(ResultVar(GlobalVarSpec(43)), ImmediateWordParam(32))  // pause-key
 
         emitString44(out)
 
-        AssignLiteralToStringInstr(ImmediateByteParam(6), ScummStringBytesV5.from("string 6")).emitBytes(out)
-        AssignLiteralToStringInstr(ImmediateByteParam(4), ScummStringBytesV5.from("pause-text: leertaste etc. pp.")).emitBytes(out)
+//        AssignLiteralToStringInstr(ImmediateByteParam(6), ScummStringBytesV5.from("string 6")).emitBytes(out)
+//        AssignLiteralToStringInstr(ImmediateByteParam(4), ScummStringBytesV5.from("pause-text: leertaste etc. pp.")).emitBytes(out)
 
         emitBytesForBannerColorString(out)
 
@@ -288,6 +277,7 @@ fun dummyEntryCodeBytes(): ByteArray {
         LoadCharsetInstr(charsetParam).emitBytes(out)
         CharsetInstr(charsetParam).emitBytes(out)
 
+/*
         listOf(0xfc, 0xfd).forEach { who ->
             // who == 0xfe||0xff -> load charset 0
             DebugInstr(ImmediateWordParam(who)).emitBytes(out)
@@ -305,6 +295,7 @@ fun dummyEntryCodeBytes(): ByteArray {
 
             printInstr.emitBytes(out)
         }
+*/
 
         val actorParam = ImmediateByteParam(11)
 
@@ -324,19 +315,18 @@ fun dummyEntryCodeBytes(): ByteArray {
         )
         ActorInstr(actorParam, actorSubs).emitBytes(out)
 
-        PutActorInRoomInstr(actorParam, ImmediateByteParam(1)).emitBytes(out)
+        PutActorInRoomInstr(actorParam, ImmediateByteParam(113)).emitBytes(out)
         PutActorAtInstr(actorParam, ImmediateWordParam(50), ImmediateWordParam(50)).emitBytes(out)
 
-        SayLineInstr(listOf(PrintInstr.Text(ScummStringBytesV5.from("funzt dat getz?")))).emitBytes(out)
+        (0..16).forEach { idx ->
+            SayLineInstr(listOf(
+                PrintInstr.At(ImmediateWordParam(10), ImmediateWordParam(idx * 10)),
+                PrintInstr.Color(ImmediateByteParam(3)),
+                PrintInstr.Center,
+                PrintInstr.Text(ScummStringBytesV5.from("funzt dat getz?")))).emitBytes(out)
+            SleepForJiffiesInstr(100).emitBytes(out)
+        }
 
-        val drawBoxBytes = DrawBoxInstr(
-            ImmediateWordParam(10),
-            ImmediateWordParam(10),
-            ImmediateWordParam(150),
-            ImmediateWordParam(300),
-            ImmediateByteParam(2)
-        ).emitBytes()
-        out.write(drawBoxBytes)
 
         DebugInstr(ImmediateWordParam(1337)).emitBytes(out)
 

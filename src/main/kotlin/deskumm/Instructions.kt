@@ -1,13 +1,5 @@
 package deskumm
 
-import com.github.ajalt.clikt.core.CliktCommand
-import com.github.ajalt.clikt.core.main
-import com.github.ajalt.clikt.parameters.arguments.argument
-import com.github.ajalt.clikt.parameters.options.flag
-import com.github.ajalt.clikt.parameters.options.option
-import com.github.ajalt.clikt.parameters.types.file
-import com.github.michaelbull.result.map
-import com.github.michaelbull.result.mapBoth
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.DataInput
@@ -182,6 +174,12 @@ class LoadCharsetInstr(val charsetParam: ByteParam) : Instruction {
         out.write(0x0c)
         out.write(applyParamBits(0x12, charsetParam))
         charsetParam.emitBytes(out)
+    }
+
+    companion object {
+        fun emit(dataOut: DataOutput, charset: Int) {
+            LoadCharsetInstr(ImmediateByteParam(charset)).emitBytes(dataOut)
+        }
     }
 }
 
@@ -372,54 +370,6 @@ class CameraPanToInstr(val xParam: WordParam) : Instruction {
     override fun toSource(): String = "camera-pan-to ${xParam.toSource()}"
     override val length: Int
         get() = 1 + xParam.byteCount
-}
-
-fun main(args: Array<String>) = DeskummCommand().main(args)
-
-class DeskummCommand : CliktCommand() {
-    val scriptPath by argument(name = "script-path").file(mustExist = true, canBeDir = false)
-    val listReferencedScripts by option("--list-referenced-scripts", "-l").flag(default = false)
-
-    override fun run() {
-        loadScript(scriptPath)
-            .map { script ->
-                println(scriptPath)
-
-                script to decodeInstructionsFromScriptBytes(script)
-            }
-            .map { (script, offsetAndInstructions) ->
-                if (listReferencedScripts) {
-                    val referencedScripts = collectReferencedScripts(offsetAndInstructions.map { it.second })
-
-                    if (!referencedScripts.isEmpty()) {
-                        println("referenced scripts: ${referencedScripts.sortedBy { it.id }.joinToString { it.id.toString() }}")
-                    } else {
-                        println("no referenced scripts found")
-                    }
-                }
-
-                script to offsetAndInstructions
-            }
-            .map { (script, instructions) ->
-                instructions.map { (offset, instruction) ->
-                    val bytesString = script.sliceArray(offset..<offset + instruction.length)
-                        .joinToString(" ") { "%02x".format(it) }
-
-                    "%6d %s\n       %s".format(offset, instruction.toSource(), bytesString)
-                }
-            }
-            .mapBoth(
-                success = { strings -> strings.forEach { println(it) } },
-                failure = { err -> println(err) }
-            )
-    }
-
-    private fun collectReferencedScripts(instructions: Collection<Instruction>): Collection<ScriptReference> {
-        return instructions
-            .filterIsInstance<ScriptReferencing>()
-            .flatMap { it.referencedScripts }
-            .toSet()
-    }
 }
 
 typealias ScriptId = Int
@@ -842,7 +792,7 @@ object StopSentenceScriptInstr : Instruction {
 }
 
 // 0x20
-object StopMusicOpcode : Opcode("stop-music", 1)
+object StopMusicInstr : SimpleInstr("stop-music", byteArrayOf(0x20))
 
 // 0x23, 0xa3
 class AssignResultOfActorYInstr(val resultVar: ResultVar, val objectParam: WordParam) : Instruction {
@@ -859,6 +809,14 @@ class ComeOutInRoomInstr(val objectParam: WordParam, val roomParam: ByteParam, v
 
     override val length: Int
         get() = 1 + objectParam.byteCount + roomParam.byteCount + 4 /* x and y */
+
+    fun emitBytes(out: DataOutput) {
+        out.writeByte(applyParamBits(0x24, objectParam))
+        objectParam.emitBytes(out)
+        roomParam.emitBytes(out)
+        out.writeInt(x)
+        out.writeInt(y)
+    }
 }
 
 // 0x25, 0x65, 0xa5, 0xe5
@@ -1040,6 +998,13 @@ class SleepForJiffiesInstr(val jiffies: Int) : Instruction {
     override fun toSource(): String = "sleep-for $jiffies jiffies"
     override val length: Int
         get() = 4 /* opcode + jiffies */
+
+    fun emitBytes(out: DataOutput) {
+        out.writeByte(0x2e)
+        out.writeByte(jiffies.and(0xff))
+        out.writeByte(jiffies.shr(8).and(0xff))
+        out.writeByte(jiffies.shr(16).and(0xff))
+    }
 }
 
 // 0x30/0xb0 0x01
@@ -1074,10 +1039,22 @@ object SetBoxPathInstr : Instruction {
 }
 
 // 0x1a/0x9a
-class AssignValueInstr(val resultVar: ResultVar, val valueParam: WordParam) : Instruction {
+class AssignValueToVarInstr(val resultVar: ResultVar, val valueParam: WordParam) : Instruction {
     override fun toSource(): String = "${resultVar.toSource()} := ${valueParam.toSource()}"
     override val length: Int
         get() = 1 + resultVar.byteCount + valueParam.byteCount
+
+    fun emitBytes(dataOut: DataOutput) {
+        dataOut.writeByte(applyParamBits(0x1a, valueParam))
+        resultVar.emitBytes(dataOut)
+        valueParam.emitBytes(dataOut)
+    }
+
+    companion object {
+        fun emit(dataOut: DataOutput, resultVar: ResultVar, value: Int) {
+            AssignValueToVarInstr(resultVar, ImmediateWordParam(value)).emitBytes(dataOut)
+        }
+    }
 }
 
 // 0x1c/0x9c
@@ -1133,10 +1110,24 @@ class RoomScrollInstr(val arg1: WordParam, val arg2: WordParam) : Instruction {
         get() = 2 /* opcode */ + arg1.byteCount + arg2.byteCount
 }
 
+// 0x33/0x73/0xb3/0xf3
 class SetScreenInstr(val arg1: WordParam, val arg2: WordParam) : Instruction {
     override fun toSource(): String = "set-screen ${arg1.toSource()} to ${arg2.toSource()}"
     override val length: Int
         get() = 2 /* opcode */ + arg1.byteCount + arg2.byteCount
+
+    fun emitBytes(out: DataOutput) {
+        out.writeByte(0x33)
+        out.writeByte(applyParamBits(0x3, arg1, arg2))
+        arg1.emitBytes(out)
+        arg2.emitBytes(out)
+    }
+
+    companion object {
+        fun emit(dataOut: DataOutput, arg1: Int, arg2: Int) {
+            SetScreenInstr(ImmediateWordParam(arg1), ImmediateWordParam(arg2)).emitBytes(dataOut)
+        }
+    }
 }
 
 // 0x04
@@ -1166,14 +1157,14 @@ class FadesInstr(val aParam: WordParam) : Instruction {
         get() = 2 + aParam.byteCount
 }
 
-object CursorOn : Opcode("cursor on", 2)
-object CursorOff : Opcode("cursor off", 2)
-object UserPutOn : Opcode("userput on", 2)
-object UserPutOff : Opcode("userput off", 2)
-object CursorSoftOn : Opcode("cursor soft-on", 2)
-object CursorSoftOff : Opcode("cursor soft-off", 2)
-object UserPutSoftOn : Opcode("userput soft-on", 2)
-object UserPutSoftOff : Opcode("userput soft-off", 2)
+object CursorOnInstr : SimpleInstr( "cursor on", byteArrayOf(0x2c, 0x01))
+object CursorOffInstr : SimpleInstr( "cursor off", byteArrayOf(0x2c, 0x02))
+object UserPutOn : SimpleInstr( "userput on", byteArrayOf(0x2c, 0x03))
+object UserPutOff : SimpleInstr( "userput off", byteArrayOf(0x2c, 0x04))
+object CursorSoftOn : SimpleInstr( "cursor soft-on", byteArrayOf(0x2c, 0x05))
+object CursorSoftOff : SimpleInstr( "cursor soft-off", byteArrayOf(0x2c, 0x06))
+object UserPutSoftOn : SimpleInstr( "userput soft-on", byteArrayOf(0x2c, 0x07))
+object UserPutSoftOff : SimpleInstr( "userput soft-off", byteArrayOf(0x2c, 0x08))
 
 class CursorImageInstr(val cursorParam: ByteParam, val imageParam: ByteParam) : Instruction {
     override fun toSource(): String = "cursor ${cursorParam.toSource()} image ${imageParam.toSource()}"
@@ -1199,6 +1190,7 @@ class CursorInstr(val cursorParam: ByteParam) : Instruction {
         get() = 2 + cursorParam.byteCount
 }
 
+// 0x2c0d
 class CharsetInstr(val charsetParam: ByteParam) : Instruction {
     override fun toSource(): String = "charset ${charsetParam.toSource()}"
     override val length: Int
@@ -1207,6 +1199,12 @@ class CharsetInstr(val charsetParam: ByteParam) : Instruction {
     fun emitBytes(out: DataOutput) {
         out.write(byteArrayOf(0x2c, applyParamBits(0xd, charsetParam).toByte()))
         charsetParam.emitBytes(out)
+    }
+
+    companion object {
+        fun emit(dataOut: DataOutput, charset: Int) {
+            CharsetInstr(ImmediateByteParam(charset)).emitBytes(dataOut)
+        }
     }
 }
 
@@ -1327,6 +1325,18 @@ class DrawBoxInstr(
 
     private fun paramBits(param: WordParam, bits: Int): Int = if (!param.isImmediate) bits else 0
     private fun paramBits(param: ByteParam, bits: Int): Int = if (!param.isImmediate) bits else 0
+
+    companion object {
+        fun emit(dataOut: DataOutput, x1: Int, y1: Int, x2: Int, y2: Int, color: Int) {
+            DrawBoxInstr(
+                ImmediateWordParam(x1),
+                ImmediateWordParam(y1),
+                ImmediateWordParam(x2),
+                ImmediateWordParam(y2),
+                ImmediateByteParam(color)
+            ).emit(dataOut)
+        }
+    }
 }
 
 // 0x40
@@ -2190,8 +2200,8 @@ fun decompileCursorInstruction(bytes: ByteArray, offset: Int): Instruction {
     val opcode2 = data.readUnsignedByte()
 
     val instruction = when (opcode2.and(0x1f)) {
-        1 -> CursorOn
-        2 -> CursorOff
+        1 -> CursorOnInstr
+        2 -> CursorOffInstr
         3 -> UserPutOn
         4 -> UserPutOff
         5 -> CursorSoftOn

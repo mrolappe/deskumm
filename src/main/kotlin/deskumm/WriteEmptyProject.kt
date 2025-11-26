@@ -14,11 +14,11 @@ class WriteEmptyProjectCommand : CliktCommand() {
     val baseName by argument(name = "base-name", help = "Base name of project")
 
     override fun run() {
-        writeEmptyDirFile(File("$baseName.000"))
+//        writeEmptyDirFile(File("$baseName.000"))
 
-        writeDummyLecfFileForCharset(Paths.get("$baseName.002"))
+//        writeDummyLecfFileForCharset(Paths.get("$baseName.002"))
         writeDummyLecfFileForRoomAndScript(Paths.get("$baseName.004"))
-        writeDummyLecfFileForScript(Paths.get("$baseName.005"))
+//        writeDummyLecfFileForScript(Paths.get("$baseName.005"))
     }
 }
 
@@ -49,29 +49,6 @@ fun bannerBytes(count: Int): ByteArray {
     return ByteArray(count, { i -> ' '.toByte() })
 }
 
-object CursonOnEmit {
-    fun bytes(): ByteArray = byteArrayOf(0x27, 1)
-}
-
-object CursorOffEmit {
-    fun bytes(): ByteArray = byteArrayOf(0x27, 2)
-}
-object UserPutOnEmit {
-    fun bytes(): ByteArray = byteArrayOf(0x27, 3)
-}
-
-object UserPutOffEmit {
-    fun bytes(): ByteArray = byteArrayOf(0x27, 4)
-}
-
-object CursorSoftOnEmit {
-    fun bytes(): ByteArray = byteArrayOf(0x27, 5)
-}
-
-object CursorSoftOffEmit {
-    fun bytes(): ByteArray = byteArrayOf(0x27, 6)
-}
-
 
 class CursorSetCharsetInstr(val charset: Int) {
     init {
@@ -98,65 +75,74 @@ fun writeDummyLecfFileForScript(path: Path) {
 
 fun emitDummyScriptBytes(dataOut: DataOutput) {
     // set-screen 16 to 144
-    dataOut.write(byteArrayOf(0x33, 0x03))
-    ImmediateWordParam(16).emitBytes(dataOut)
-    ImmediateWordParam(144).emitBytes(dataOut)
+    SetScreenInstr.emit(dataOut, 100, 200)
 
-    // load-charset 1
-    dataOut.write(byteArrayOf(0x0c, 0x12))
-    ImmediateByteParam(1).emitBytes(dataOut)
+    CurrentRoomInstr(ByteVarParam(LocalVarSpec(1))).emitBytes(dataOut)
+//    LoadCharsetInstr(ByteVarParam(LocalVarSpec(0))).emitBytes(dataOut)
 
-    // charset 1
-    dataOut.write(byteArrayOf(0x2c, 0xd))
-    ImmediateByteParam(1).emitBytes(dataOut)
+    val charset = 3
+    LoadCharsetInstr.emit(dataOut, charset)
+    CharsetInstr.emit(dataOut, charset)
 
-        emitBytesForBannerColorString(dataOut)
+//        emitBytesForBannerColorString(dataOut)
 
+    // pause-key
+    AssignValueToVarInstr.emit(dataOut, ResultVar(GlobalVarSpec(43)), 32)
     AssignLiteralToStringInstr(ImmediateByteParam(4), ScummStringBytesV5.from("pause-text: leertaste etc. pp.")).emitBytes(dataOut)
 
-    listOf(/*1,*/ 5).map { ImmediateByteParam(it) }.forEach { roomParam ->
+    val roomParam = ImmediateByteParam(113)
+    LockRoomInstr(roomParam).emitBytes(dataOut)
+    LoadRoomInstr(roomParam).emitBytes(dataOut)
+    CurrentRoomInstr(roomParam).emitBytes(dataOut)
+/*
+    listOf(*/
+/*1,*//*
+ 5).map { ImmediateByteParam(it) }.forEach { roomParam ->
         LockRoomInstr(roomParam).emitBytes(dataOut)
         LoadRoomInstr(roomParam).emitBytes(dataOut)
         CurrentRoomInstr(roomParam).emitBytes(dataOut)
     }
+*/
 
-    EndScriptInstr.emitBytes(dataOut)
-//        dataOut.write(CursonOnEmit.bytes())
-//        dataOut.write(CursorSoftOnEmit.bytes())
+    CursorOnInstr.emitBytes(dataOut)
+    CursorSoftOn.emitBytes(dataOut)
 
-    StartMusicInstr(ImmediateByteParam(0)).emit(dataOut)
+    StartMusicInstr(ImmediateByteParam(107)).emit(dataOut)
 
-    val drawBoxBytes = DrawBoxInstr(
-        ImmediateWordParam(10),
-        ImmediateWordParam(10),
-        ImmediateWordParam(150),
-        ImmediateWordParam(300),
-        ImmediateByteParam(2)
-    ).emitBytes()
-    dataOut.write(drawBoxBytes)
+    (0..32).forEach { idx ->
+        DrawBoxInstr.emit(dataOut, idx * 10, 10, 320, 50, idx)
+        SleepForJiffiesInstr(100).emitBytes(dataOut)
+    }
 
-    dataOut.write(
-        byteArrayOf(
-            0x14.toByte(), 0xfc.toByte(),
-            0, 0x10, 0, 0x10, 0,    // at x, y
-            1, 3,   // color 3
-            4,  // center
-            //            0xfc.toByte(),
-            0xf, 'A'.toByte(), 'B'.toByte(), 'C'.toByte(), 'D'.toByte(), 0,
-//                0xff.toByte(),
-        )
+    emitPrintSystem(
+        dataOut,
+        "tach",
+        listOf(
+            PrintInstr.At(ImmediateWordParam(10), ImmediateWordParam(10)),
+            PrintInstr.Color(ImmediateByteParam(3)),
+            PrintInstr.Center)
     )
 
-//    PutActorInRoomInstr(ImmediateByteParam(1), roomParam).emitBytes(dataOut)
+    emitPrintText(dataOut, "hinter dir^ein dreiköpfiger affe",
+        listOf(PrintInstr.At(ImmediateWordParam(100), ImmediateWordParam(150))))
+//    emitPrintLine(dataOut, "print-line; mal schauen, wie es aussieht")
+//    emitSayLine(dataOut, "say-line; mal schauen, wie es aussieht")
+
+    PutActorInRoomInstr(ImmediateByteParam(12), roomParam).emitBytes(dataOut)
+    PutActorAtInstr(ImmediateByteParam(12), ImmediateWordParam(0), ImmediateWordParam(0)).emitBytes(dataOut)
 
     LoadCharsetInstr(ImmediateByteParam(2)).emitBytes(dataOut)
     dataOut.write(CursorSetCharsetInstr(2).bytes())
 
-    dataOut.write(byteArrayOf(0x27, 1, 5) + "neu starten?0".toByteArray())
-    dataOut.write(0)
+    AssignLiteralToStringInstr(ImmediateByteParam(5), ScummStringBytesV5.from("neu starten?")).emitBytes(dataOut)
+    AssignLiteralToStringInstr(ImmediateByteParam(6), ScummStringBytesV5.from("string 6")).emitBytes(dataOut)
 
-    dataOut.write(byteArrayOf(0x27, 1, 6) + "string 6".toByteArray())
-    dataOut.write(0)
+    EndScriptInstr.emitBytes(dataOut)
+    emitPrintDebug(dataOut, "> sleep jiffies")
+    SleepForJiffiesInstr(1111).emitBytes(dataOut)
+    emitPrintDebug(dataOut, "< sleep jiffies")
+
+    StopMusicInstr.emitBytes(dataOut)
 
     // print 255 color 15 at 160, 8 center overhead
     dataOut.write(
@@ -204,6 +190,30 @@ fun emitDummyScriptBytes(dataOut: DataOutput) {
 
     // wait-for-message
     dataOut.write(byteArrayOf(0xae.toByte(), 0x02))
+}
+
+fun emitPrintLine(dataOut: DataOutput, string: String, subs: List<PrintInstr.Sub> = emptyList()) {
+    PrintInstr(ImmediateByteParam(0xff), subs + PrintInstr.Text(ScummStringBytesV5.from(string))).emitBytes(dataOut)
+}
+
+fun emitPrintText(dataOut: DataOutput, string: String, subs: List<PrintInstr.Sub> = emptyList()) {
+    PrintInstr(ImmediateByteParam(0xfe), subs + PrintInstr.Text(ScummStringBytesV5.from(string))).emitBytes(dataOut)
+}
+
+fun emitSayLine(dataOut: DataOutput, string: String, subs: List<PrintInstr.Sub> = emptyList()) {
+    SayLineInstr(subs + PrintInstr.Text(ScummStringBytesV5.from(string))).emitBytes(dataOut)
+}
+
+fun emitPrintSystem(
+    dataOut: DataOutput,
+    string: String,
+    subs: List<PrintInstr.Sub>
+) {
+    PrintInstr(ImmediateByteParam(0xfc), subs + PrintInstr.Text(ScummStringBytesV5.from(string))).emitBytes(dataOut)
+}
+
+fun emitPrintDebug(dataOut: DataOutput, string: String) {
+    PrintInstr(ImmediateByteParam(0xfd), listOf(PrintInstr.Text(ScummStringBytesV5.from(string)))).emitBytes(dataOut)
 }
 
 fun emitBytesForBannerColorString(byteStream: DataOutput) {

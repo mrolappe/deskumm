@@ -1,8 +1,16 @@
 package deskumm
 
+import com.github.ajalt.clikt.core.CliktCommand
+import com.github.ajalt.clikt.core.main
+import com.github.ajalt.clikt.parameters.arguments.argument
+import com.github.ajalt.clikt.parameters.options.flag
+import com.github.ajalt.clikt.parameters.options.option
+import com.github.ajalt.clikt.parameters.types.file
 import com.github.michaelbull.result.Err
 import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
+import com.github.michaelbull.result.map
+import com.github.michaelbull.result.mapBoth
 import java.io.*
 
 
@@ -23,8 +31,9 @@ class GlobalVarSpec(val varNum: Int) : VarSpec {
         get() = 2
 
     override fun emitBytes(out: DataOutput) {
-        out.writeByte(varNum.shr(8))
-        out.writeByte(varNum)
+        out.writeShortLittleEndian(varNum.toShort())
+//        out.writeByte(varNum.shr(8))
+//        out.writeByte(varNum)
     }
 }
 
@@ -34,9 +43,12 @@ class LocalVarSpec(val varNum: Int) : VarSpec {
         get() = 2
 
     override fun emitBytes(out: DataOutput) {
+        val value = varNum.and(0x3fff).or(0x4000).toShort()
+        println("LVS, emit; value varnum $varNum -> 0x${value.toHexString()}")
+        out.writeShortLittleEndian(value)
         // TODO set bits for local var
-        out.writeByte(varNum.shr(8))
-        out.writeByte(varNum)
+//        out.writeByte(varNum.shr(8))
+//        out.writeByte(varNum)
     }
 }
 
@@ -471,7 +483,7 @@ fun decompileInstruction(bytes: ByteArray, offset: Int): Instruction? {
         0x1a, 0x9a -> {
             val resultVar = readResultVar(data)
             val valueParam = readWordParam(data, opcode, 0x80)
-            AssignValueInstr(resultVar, valueParam)
+            AssignValueToVarInstr(resultVar, valueParam)
         }
 
         0x1c, 0x09c -> StartSoundInstr(readByteParam(data, opcode, 0x80))
@@ -502,7 +514,7 @@ fun decompileInstruction(bytes: ByteArray, offset: Int): Instruction? {
             WalkActorToXYInstr(actorParam, xParam, yParam)
         }
 
-        0x20 -> StopMusicOpcode
+        0x20 -> StopMusicInstr
 
         0x23, 0xa3 -> {
             val resultVar = readResultVar(data)
@@ -1005,3 +1017,50 @@ class ResultVar(val varSpec: VarSpec) {
 
 fun toObjSpec(objSpec: Int) = objSpec
 
+fun main(args: Array<String>) = DeskummCommand().main(args)
+
+class DeskummCommand : CliktCommand() {
+    val scriptPath by argument(name = "script-path").file(mustExist = true, canBeDir = false)
+    val listReferencedScripts by option("--list-referenced-scripts", "-l").flag(default = false)
+
+    override fun run() {
+        loadScript(scriptPath)
+            .map { script ->
+                println(scriptPath)
+
+                script to decodeInstructionsFromScriptBytes(script)
+            }
+            .map { (script, offsetAndInstructions) ->
+                if (listReferencedScripts) {
+                    val referencedScripts = collectReferencedScripts(offsetAndInstructions.map { it.second })
+
+                    if (!referencedScripts.isEmpty()) {
+                        println("referenced scripts: ${referencedScripts.sortedBy { it.id }.joinToString { it.id.toString() }}")
+                    } else {
+                        println("no referenced scripts found")
+                    }
+                }
+
+                script to offsetAndInstructions
+            }
+            .map { (script, instructions) ->
+                instructions.map { (offset, instruction) ->
+                    val bytesString = script.sliceArray(offset..<offset + instruction.length)
+                        .joinToString(" ") { "%02x".format(it) }
+
+                    "%6d %s\n       %s".format(offset, instruction.toSource(), bytesString)
+                }
+            }
+            .mapBoth(
+                success = { strings -> strings.forEach { println(it) } },
+                failure = { err -> println(err) }
+            )
+    }
+
+    private fun collectReferencedScripts(instructions: Collection<Instruction>): Collection<ScriptReference> {
+        return instructions
+            .filterIsInstance<ScriptReferencing>()
+            .flatMap { it.referencedScripts }
+            .toSet()
+    }
+}
