@@ -450,6 +450,7 @@ class ActorInstr(val actorParam: ByteParam, val subs: List<Sub>) : Instruction {
 
         override fun emitBytes(out: DataOutput) {
             out.writeByte(applyParamBits(0x1, costumeParam))
+            costumeParam.emitBytes(out)
         }
     }
 
@@ -522,6 +523,7 @@ class ActorInstr(val actorParam: ByteParam, val subs: List<Sub>) : Instruction {
 
         override fun emitBytes(out: DataOutput) {
             out.writeByte(applyParamBits(0xc, colorParam))
+            colorParam.emitBytes(out)
         }
     }
 
@@ -1901,7 +1903,7 @@ object WaitForMessageInstr : Instruction {
     override val length: Int
         get() = 2
 
-    fun emitTo(out: DataOutput) {
+    fun emitBytes(out: DataOutput) {
         out.writeByte(0xae)
         out.writeByte(0x02)
     }
@@ -1921,6 +1923,11 @@ object WaitForSentenceInstr : Instruction {
 
     override val length: Int
         get() = 2
+
+    fun emitBytes(out: DataOutput) {
+        out.writeByte(0xae)
+        out.writeByte(0x04)
+    }
 }
 
 class JumpIfVarNotEqualInstr(val varSpec: VarSpec, val valueParam: WordParam, val offset: Int) : Instruction {

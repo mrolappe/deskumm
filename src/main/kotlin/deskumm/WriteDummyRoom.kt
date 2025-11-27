@@ -321,9 +321,9 @@ fun dummyEntryCodeBytes(): ByteArray {
         (0..16).forEach { idx ->
             SayLineInstr(listOf(
                 PrintInstr.At(ImmediateWordParam(10), ImmediateWordParam(idx * 10)),
-                PrintInstr.Color(ImmediateByteParam(3)),
+                PrintInstr.Color(ImmediateByteParam(idx)),
                 PrintInstr.Center,
-                PrintInstr.Text(ScummStringBytesV5.from("funzt dat getz?")))).emitBytes(out)
+                PrintInstr.Text(ScummStringBytesV5.from("room entry script: funzt dat getz?")))).emitBytes(out)
             SleepForJiffiesInstr(100).emitBytes(out)
         }
 

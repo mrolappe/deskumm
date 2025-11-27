@@ -16,8 +16,6 @@ import java.io.*
 
 typealias ObjSpec = Int
 
-fun objSpecToString(objSpec: ObjSpec) = "obj$objSpec"
-
 
 sealed interface VarSpec {
     fun toSourceName(): String
@@ -77,7 +75,7 @@ class VarSpec0x2000(val varNum: Int) : VarSpec {
 }
 
 val globalVarNames = mapOf(
-    0 to "key-press",
+    0 to "last-result",
     1 to "selected-actor",
     2 to "camera-pos-x",
     3 to "have-msg",

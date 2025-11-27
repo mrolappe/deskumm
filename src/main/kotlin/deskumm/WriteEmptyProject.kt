@@ -42,20 +42,12 @@ fun writeDummyLecfFileForRoomAndScript(path: Path) {
         DataOutputStream(bytes).use { emitDummyScriptBytes(it) }
         val scrpBlock = ScrpBlockV5(bytes.toByteArray())
         scrpBlock.writeTo(out)
+        DataOutputStream(FileOutputStream(Paths.get("data/SCRP/dummy.SCRP").toFile())).use { scrpBlock.writeTo(it) }
     }
 }
 
 fun bannerBytes(count: Int): ByteArray {
     return ByteArray(count, { i -> ' '.toByte() })
-}
-
-
-class CursorSetCharsetInstr(val charset: Int) {
-    init {
-        require(charset in 1..<256) { "Illegal charset: $charset" }
-    }
-
-    fun bytes(): ByteArray = byteArrayOf(0x2c, 13, charset.toByte())
 }
 
 
@@ -74,17 +66,16 @@ fun writeDummyLecfFileForScript(path: Path) {
 }
 
 fun emitDummyScriptBytes(dataOut: DataOutput) {
-    // set-screen 16 to 144
-    SetScreenInstr.emit(dataOut, 100, 200)
+    SetScreenInstr.emit(dataOut, 0, 150)
 
-    CurrentRoomInstr(ByteVarParam(LocalVarSpec(1))).emitBytes(dataOut)
+//    CurrentRoomInstr(ByteVarParam(LocalVarSpec(1))).emitBytes(dataOut)
 //    LoadCharsetInstr(ByteVarParam(LocalVarSpec(0))).emitBytes(dataOut)
 
-    val charset = 3
+    val charset = 4
     LoadCharsetInstr.emit(dataOut, charset)
     CharsetInstr.emit(dataOut, charset)
 
-//        emitBytesForBannerColorString(dataOut)
+        emitBytesForBannerColorString(dataOut)
 
     // pause-key
     AssignValueToVarInstr.emit(dataOut, ResultVar(GlobalVarSpec(43)), 32)
@@ -104,14 +95,67 @@ fun emitDummyScriptBytes(dataOut: DataOutput) {
     }
 */
 
+    (1..12).forEach { costume ->
+        LockCostumeInstr(ImmediateByteParam(costume)).emitBytes(dataOut)
+        LoadCostumeInstr(ImmediateByteParam(costume)).emitBytes(dataOut)
+    }
+
+    // selected-actor
+    AssignValueToVarInstr(ResultVar(GlobalVarSpec(1)), ImmediateWordParam(1)).emitBytes(dataOut)
+
+    // machine-speed
+    AssignValueToVarInstr(ResultVar(GlobalVarSpec(68)), ImmediateWordParam(2)).emitBytes(dataOut)
+
+    (1..24).forEach { idx ->
+        ActorInstr(
+            ImmediateByteParam(1),
+            listOf(
+//                ActorInstr.Default,
+                ActorInstr.Costume(ImmediateByteParam(idx)),
+                ActorInstr.IgnoreBoxes,
+                ActorInstr.TalkColor(ImmediateByteParam(idx)),
+                ActorInstr.Name(ScummStringBytesV5.from("le guy costume $idx"))
+            )
+        ).emitBytes(dataOut)
+
+        PutActorInRoomInstr(ImmediateByteParam(1), roomParam).emitBytes(dataOut)
+        PutActorAtInstr(ImmediateByteParam(1), ImmediateWordParam(100), ImmediateWordParam(100)).emitBytes(dataOut)
+        SayLineInstr(listOf(PrintInstr.Text(ScummStringBytesV5.from("tach!")))).emitBytes(dataOut)
+        WaitForMessageInstr.emitBytes(dataOut)
+
+        SleepForJiffiesInstr(60).emitBytes(dataOut)
+    }
+
+    (3..20).forEach { sound ->
+        emitPrintText(
+            dataOut,
+            "sound $sound",
+            listOf(
+                PrintInstr.At(ImmediateWordParam(100), ImmediateWordParam(10 * sound)),
+                PrintInstr.Color(ImmediateByteParam(3)),
+                PrintInstr.Overhead
+            )
+        )
+
+        StartMusicInstr(ImmediateByteParam(sound)).emit(dataOut)
+        SleepForJiffiesInstr(120).emitBytes(dataOut)
+    }
+
+    (50..100 step 5).forEach { x ->
+        PutActorAtInstr(ImmediateByteParam(1), ImmediateWordParam(x), ImmediateWordParam(100)).emitBytes(dataOut)
+        SleepForJiffiesInstr(10).emitBytes(dataOut)
+    }
+
+    SayLineInstr(listOf(PrintInstr.Text(ScummStringBytesV5.from("le guy sagt was")))).emitBytes(dataOut)
+    WaitForMessageInstr.emitBytes(dataOut)
+
     CursorOnInstr.emitBytes(dataOut)
     CursorSoftOn.emitBytes(dataOut)
 
-    StartMusicInstr(ImmediateByteParam(107)).emit(dataOut)
 
-    (0..32).forEach { idx ->
+    (0..8).forEach { idx ->
         DrawBoxInstr.emit(dataOut, idx * 10, 10, 320, 50, idx)
-        SleepForJiffiesInstr(100).emitBytes(dataOut)
+        SleepForJiffiesInstr(10).emitBytes(dataOut)
     }
 
     emitPrintSystem(
@@ -131,8 +175,8 @@ fun emitDummyScriptBytes(dataOut: DataOutput) {
     PutActorInRoomInstr(ImmediateByteParam(12), roomParam).emitBytes(dataOut)
     PutActorAtInstr(ImmediateByteParam(12), ImmediateWordParam(0), ImmediateWordParam(0)).emitBytes(dataOut)
 
-    LoadCharsetInstr(ImmediateByteParam(2)).emitBytes(dataOut)
-    dataOut.write(CursorSetCharsetInstr(2).bytes())
+    LoadCharsetInstr(ImmediateByteParam(3)).emitBytes(dataOut)
+    CharsetInstr(ImmediateByteParam(3)).emitBytes(dataOut)
 
     AssignLiteralToStringInstr(ImmediateByteParam(5), ScummStringBytesV5.from("neu starten?")).emitBytes(dataOut)
     AssignLiteralToStringInstr(ImmediateByteParam(6), ScummStringBytesV5.from("string 6")).emitBytes(dataOut)
@@ -144,52 +188,11 @@ fun emitDummyScriptBytes(dataOut: DataOutput) {
 
     StopMusicInstr.emitBytes(dataOut)
 
-    // print 255 color 15 at 160, 8 center overhead
-    dataOut.write(
-        byteArrayOf(
-            0x14,
-            0xff.toByte(),
-            0x01,
-            0x0f,
-            0x00,
-            0xa0.toByte(),
-            0x00,
-            0x08,
-            0x00,
-            0x04,
-            0x07,
-            0xff.toByte()
-        )
-    )
-    dataOut.write(
-        byteArrayOf(
-            0x14,
-            0xfc.toByte(),
-            0x01,
-            0x0c,
-            0x0f,
-            0x48,
-            0x61,
-            0x72,
-            0x64,
-            0x20,
-            0x64,
-            0x69,
-            0x73,
-            0x6b,
-            0
-        )
-    )
-
-
     // print 252 text "Hard disk"
     dataOut.write(byteArrayOf(0x14, 0xfc.toByte(), 0x0f, 0x48, 0x61, 0x72, 0x64, 0x20, 0x64, 0x69, 0x73, 0x6b, 0x00))
 
     // say-line text "..."
-    dataOut.write(byteArrayOf(0xd8.toByte(), 0xf) + "tach!".toByteArray() + byteArrayOf(0x00))
-
-    // wait-for-message
-    dataOut.write(byteArrayOf(0xae.toByte(), 0x02))
+//    dataOut.write(byteArrayOf(0xd8.toByte(), 0xf) + "tach!".toByteArray() + byteArrayOf(0x00))
 }
 
 fun emitPrintLine(dataOut: DataOutput, string: String, subs: List<PrintInstr.Sub> = emptyList()) {
