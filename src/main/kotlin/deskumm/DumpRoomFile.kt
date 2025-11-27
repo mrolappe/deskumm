@@ -34,6 +34,7 @@ enum class RoomFileBlockId(val id: String) {
     IM01("IM01"),
     IM02("IM02"),
     IM03("IM03"),
+    IM04("IM04"),
     EXCD("EXCD"),
     LSCR("LSCR"),
     NLSC("NLSC"),

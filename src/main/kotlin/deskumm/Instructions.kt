@@ -423,7 +423,7 @@ private fun scriptReferences(vararg params: ByteParam): Set<ScriptReference> {
 
 // 0x13/0x53/0x93/0xd3
 class ActorInstr(val actorParam: ByteParam, val subs: List<Sub>) : Instruction {
-    override fun toSource(): String = "TODO actor ${actorParam.toSource()} ${subs.joinToString { it.source }}"
+    override fun toSource(): String = "actor ${actorParam.toSource()} ${subs.joinToString { it.source }}"
 
     override val length: Int
         get() = 2 /* opcode + final 0xff */ + actorParam.byteCount + subs.sumOf { it.byteSize }
@@ -463,6 +463,8 @@ class ActorInstr(val actorParam: ByteParam, val subs: List<Sub>) : Instruction {
 
         override fun emitBytes(out: DataOutput) {
             out.writeByte(applyParamBits(0x2, xParam, yParam))
+            xParam.emitBytes(out)
+            yParam.emitBytes(out)
         }
     }
 
@@ -1104,6 +1106,13 @@ class WalkActorToXYInstr(val actorParam: ByteParam, val xParam: WordParam, val y
 
     override val length: Int
         get() = 1 + actorParam.byteCount + xParam.byteCount + yParam.byteCount
+
+    fun emitBytes(out: DataOutput) {
+        out.writeByte(applyParamBits(0x1e, actorParam, xParam, yParam))
+        actorParam.emitBytes(out)
+        xParam.emitBytes(out)
+        yParam.emitBytes(out)
+    }
 }
 
 class RoomScrollInstr(val arg1: WordParam, val arg2: WordParam) : Instruction {
@@ -1562,6 +1571,12 @@ class CurrentRoomInstr(val roomParam: ByteParam) : Instruction {
         val baos = ByteArrayOutputStream()
         DataOutputStream(baos).use { out -> emitBytes(out) }
         return baos.toByteArray()
+    }
+
+    companion object {
+        fun emit(dataOut: DataOutput, room: Int) {
+            CurrentRoomInstr(ImmediateByteParam(room)).emitBytes(dataOut)
+        }
     }
 }
 

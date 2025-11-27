@@ -81,10 +81,12 @@ fun emitDummyScriptBytes(dataOut: DataOutput) {
     AssignValueToVarInstr.emit(dataOut, ResultVar(GlobalVarSpec(43)), 32)
     AssignLiteralToStringInstr(ImmediateByteParam(4), ScummStringBytesV5.from("pause-text: leertaste etc. pp.")).emitBytes(dataOut)
 
-    val roomParam = ImmediateByteParam(113)
+    val theRoom = 113
+    val roomParam = ImmediateByteParam(theRoom)
     LockRoomInstr(roomParam).emitBytes(dataOut)
     LoadRoomInstr(roomParam).emitBytes(dataOut)
     CurrentRoomInstr(roomParam).emitBytes(dataOut)
+
 /*
     listOf(*/
 /*1,*//*
@@ -106,6 +108,26 @@ fun emitDummyScriptBytes(dataOut: DataOutput) {
     // machine-speed
     AssignValueToVarInstr(ResultVar(GlobalVarSpec(68)), ImmediateWordParam(2)).emitBytes(dataOut)
 
+    ActorInstr(
+        ImmediateByteParam(1),
+        listOf(
+//                ActorInstr.Default,
+            ActorInstr.Costume(ImmediateByteParam(1)),
+            ActorInstr.IgnoreBoxes,
+            ActorInstr.TalkColor(ImmediateByteParam(1)),
+            ActorInstr.StepDist(ImmediateByteParam(3), ImmediateByteParam(3)),
+            ActorInstr.Name(ScummStringBytesV5.from("walker"))
+        )
+    ).emitBytes(dataOut)
+    PutActorInRoomInstr(ImmediateByteParam(1), roomParam).emitBytes(dataOut)
+    PutActorAtInstr(ImmediateByteParam(1), ImmediateWordParam(100), ImmediateWordParam(100)).emitBytes(dataOut)
+
+    WalkActorToXYInstr(ImmediateByteParam(1), ImmediateWordParam(300), ImmediateWordParam(150)).emitBytes(dataOut)
+    PrintInstr(ImmediateByteParam(1), listOf(PrintInstr.Text(ScummStringBytesV5.from("ich gehe!")))).emitBytes(dataOut)
+
+    SleepForJiffiesInstr(1000).emitBytes(dataOut)
+
+    EndScriptInstr.emitBytes(dataOut)
     (1..24).forEach { idx ->
         ActorInstr(
             ImmediateByteParam(1),
