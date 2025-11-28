@@ -14,6 +14,7 @@ import java.io.DataOutput
 import java.io.DataOutputStream
 import java.io.File
 import java.io.FileOutputStream
+import java.io.PrintStream
 import java.io.RandomAccessFile
 
 private val logger = KotlinLogging.logger {}
@@ -237,6 +238,7 @@ fun BlockHeaderV5.expectBlockId(expectedBlockId: RoomFileBlockId) {
 
 class DumpRoomFileCommand : CliktCommand() {
     val roomFile by argument(name = "room-file", help = "Room file to dump").file(mustExist = true)
+    val outputFile by option("--output-file", "-o", help = "Output file name").file(mustExist = false)
     val encoded by option("--encoded").boolean().default(false)
     val dumpEntryCode by option("--dump-entry-code").boolean().default(false)
     val dumpExitCode by option("--dump-exit-code").boolean().default(false)
@@ -254,12 +256,14 @@ class DumpRoomFileCommand : CliktCommand() {
     private fun dumpRoomFile(path: File, encoded: Boolean) {
         val xorCode = if (encoded) 0x69.toByte() else 0x00.toByte()
 
+        val printStream: PrintStream = outputFile?.let { PrintStream(it) } ?: System.out
+
         ScummDataFileV5(RandomAccessFile(path, "r"), xorCode).use { file ->
             val blockHeader = file.readBlockHeader()
             blockHeader.expectBlockId(RoomFileBlockId.ROOM)
 
             val roomHeaderBlock = file.readRoomHeaderBlock()
-            logger.info { "Room header block: $roomHeaderBlock" }
+            printStream.println("Room header block: $roomHeaderBlock")
 
             file.expectAndSeekToEndOfBlock(RoomFileBlockId.CYCL)
             file.expectAndSeekToEndOfBlock(RoomFileBlockId.TRNS)
@@ -282,25 +286,25 @@ class DumpRoomFileCommand : CliktCommand() {
                 when (file.peekBlockId()) {
                     RoomFileBlockId.OBCD -> processObjectCode(
                         file,
-                        roomHeaderBlock.objectCount.toInt(),
-                        dump = dumpObjectCode
+                        roomHeaderBlock.objectCount,
+                        dump = dumpObjectCode,
+                        printStream
                     )
 
-                    RoomFileBlockId.EXCD -> processRoomExitCode(file, dump = dumpExitCode)
-                    RoomFileBlockId.ENCD -> processRoomEntryCode(file, dump = dumpEntryCode)
+                    RoomFileBlockId.EXCD -> processRoomExitCode(file, dump = dumpExitCode, printStream)
+                    RoomFileBlockId.ENCD -> processRoomEntryCode(file, dump = dumpEntryCode, printStream)
 
                     RoomFileBlockId.NLSC -> {
                         file.expectBlockHeaderWithId(RoomFileBlockId.NLSC)
                         numberOfLocalScripts = file.file.readShortLittleEndian().toInt()
                     }
 
-                    RoomFileBlockId.LSCR -> processLocalScript(numberOfLocalScripts, file, dump=dumpLocalScripts)
+                    RoomFileBlockId.LSCR -> processLocalScript(numberOfLocalScripts, file, dump=dumpLocalScripts, printStream)
                     else -> throw IllegalArgumentException("Unexpected block id ${file.peekBlockId()}")
                 }
             }
 
-
-            println("file length: ${file.file.length()}, file pointer: ${file.file.filePointer}")
+            logger.debug { "file length: ${file.file.length()}, file pointer: ${file.file.filePointer}" }
         }
     }
 
@@ -382,7 +386,7 @@ class DumpRoomFileCommand : CliktCommand() {
 
             val peekBlockId = file.peekBlockId()
             logger.debug { "peek block id: $peekBlockId" }
-            skipBlocksWithId(file, RoomFileBlockId.IM00, RoomFileBlockId.IM01, RoomFileBlockId.IM02, RoomFileBlockId.IM03)
+            skipBlocksWithId(file, RoomFileBlockId.IM00, RoomFileBlockId.IM01, RoomFileBlockId.IM02, RoomFileBlockId.IM03, RoomFileBlockId.IM04)
             when(peekBlockId) {
                 else -> {}
             }
@@ -400,7 +404,12 @@ class DumpRoomFileCommand : CliktCommand() {
         }
     }
 
-    private fun processLocalScript(numberOfLocalScripts: Int, file: ScummDataFileV5, dump: Boolean) {
+    private fun processLocalScript(
+        numberOfLocalScripts: Int,
+        file: ScummDataFileV5,
+        dump: Boolean,
+        printStream: PrintStream
+    ) {
         if (!dump) {
             repeat(numberOfLocalScripts) { file.expectAndSeekToEndOfBlock(RoomFileBlockId.LSCR) }
             return
@@ -410,13 +419,13 @@ class DumpRoomFileCommand : CliktCommand() {
             val localScriptBlock = file.readLocalScriptBlock()
             val instructions = decodeInstructionsFromScriptBytes(localScriptBlock.scriptBytes.bytes)
 
-            println("local script ${localScriptBlock.scriptId}:")
+            printStream.println("local script ${localScriptBlock.scriptId}:")
 
-            dumpInstructions(instructions, localScriptBlock.scriptBytes)
+            dumpInstructions(instructions, localScriptBlock.scriptBytes, printStream)
         }
     }
 
-    private fun processObjectCode(file: ScummDataFileV5, objectCount: Int, dump: Boolean) {
+    private fun processObjectCode(file: ScummDataFileV5, objectCount: Int, dump: Boolean, printStream: PrintStream) {
         if (!dump) {
             repeat(objectCount) {
                 file.expectAndSeekToEndOfBlock(RoomFileBlockId.OBCD)
@@ -428,12 +437,13 @@ class DumpRoomFileCommand : CliktCommand() {
             val objectCodeData = file.readObjectCodeData()
             val instructions = decodeInstructionsFromScriptBytes(objectCodeData.scriptBytes.bytes)
 
-            println("object code:")
+            printStream.println("object code:")
 
-            dumpInstructions(instructions, objectCodeData.scriptBytes)        }
+            dumpInstructions(instructions, objectCodeData.scriptBytes, printStream)
+        }
     }
 
-    private fun processRoomEntryCode(file: ScummDataFileV5, dump: Boolean) {
+    private fun processRoomEntryCode(file: ScummDataFileV5, dump: Boolean, printStream: PrintStream) {
         if (!dump) {
             file.expectAndSeekToEndOfBlock(RoomFileBlockId.ENCD)
             return
@@ -442,24 +452,25 @@ class DumpRoomFileCommand : CliktCommand() {
         val entryCodeData = file.readRoomEntryCodeData()
         val instructions = decodeInstructionsFromScriptBytes(entryCodeData.scriptBytes.bytes)
 
-        println("room entry code:")
+        printStream.println("room entry code:")
 
-        dumpInstructions(instructions, entryCodeData.scriptBytes)
+        dumpInstructions(instructions, entryCodeData.scriptBytes, printStream)
     }
 
     private fun dumpInstructions(
         instructions: List<Pair<Int, Instruction>>,
-        scriptBytes: ScriptBytesV5
+        scriptBytes: ScriptBytesV5,
+        printStream: PrintStream
     ) {
         instructions.forEach { offsetAndInstruction ->
             val (offset, instruction) = offsetAndInstruction
             val bytesString = scriptBytes.bytes.sliceArray(offset..<offset + instruction.length)
                 .joinToString(" ") { "%02x".format(it) }
-            println("%6d %s\n       %s".format(offset, instruction.toSource(), bytesString))
+            printStream.println("%6d %s\n       %s".format(offset, instruction.toSource(), bytesString))
         }
     }
 
-    private fun processRoomExitCode(file: ScummDataFileV5, dump: Boolean) {
+    private fun processRoomExitCode(file: ScummDataFileV5, dump: Boolean, printStream: PrintStream) {
         if (!dump) {
             file.expectAndSeekToEndOfBlock(RoomFileBlockId.EXCD)
             return
@@ -468,8 +479,8 @@ class DumpRoomFileCommand : CliktCommand() {
         val exitCodeData = file.readRoomExitCodeData()
         val instructions = decodeInstructionsFromScriptBytes(exitCodeData.scriptBytes.bytes)
 
-        println("room exit code:")
+        printStream.println("room exit code:")
 
-        dumpInstructions(instructions, exitCodeData.scriptBytes)
+        dumpInstructions(instructions, exitCodeData.scriptBytes, printStream)
     }
 }

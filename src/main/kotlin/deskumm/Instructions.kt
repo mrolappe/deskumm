@@ -265,12 +265,14 @@ class PutActorAtInstr(val actorParam: ByteParam, val xParam: WordParam, val yPar
     }
 }
 
-// 0x04
-class IfVarLessOrEqualOpcode(val varSpec: VarSpec, val value: Int, val skipOffset: Int) :
-    Opcode("if (@var <= @wert)", 7) {
+// 0x04/0x84
+class JumpIfVarGreaterInstr(val varSpec: VarSpec, val param: WordParam, val skipOffset: Int) : Instruction {
     override fun toSource(): String {
-        return "if ${nameForVar(varSpec)} <= $value (else jump $skipOffset)"
+        return "if ${varSpec.toSourceName()} > ${param.toSource()} jump $skipOffset"
     }
+
+    override val length: Int
+        get() = 1 + varSpec.byteCount + param.byteCount + 2
 }
 
 // 0x06/0x86
@@ -660,7 +662,7 @@ class PrintInstr(val whoParam: ByteParam, val subs: List<Sub>) : Instruction {
         }
     }
 
-    // 0x1
+    // 0x01
     class Color(val colorParam: ByteParam) : Sub {
         override val byteSize: Int
             get() = 1 + colorParam.byteCount
@@ -673,6 +675,33 @@ class PrintInstr(val whoParam: ByteParam, val subs: List<Sub>) : Instruction {
         }
     }
 
+    // 0x02
+    class Clipped(val clippedParam: WordParam) : Sub {
+        override val byteSize: Int
+            get() = 1 + clippedParam.byteCount
+        override val source: String
+            get() = "clipped ${clippedParam.toSource()}"
+
+        override fun emitBytes(out: DataOutput) {
+            out.writeByte(applyParamBits(0x01, clippedParam))
+            clippedParam.emitBytes(out)
+        }
+    }
+
+    // 0x03
+    class Erase(val widthParam: WordParam, val heightParam: WordParam) : Sub {
+        override val byteSize: Int
+            get() = 1 + widthParam.byteCount + heightParam.byteCount
+        override val source: String
+            get() = "erase ${widthParam.toSource()}, ${heightParam.toSource()}"
+
+        override fun emitBytes(out: DataOutput) {
+            out.writeByte(applyParamBits(0x03, widthParam, heightParam))
+            widthParam.emitBytes(out)
+            heightParam.emitBytes(out)
+        }
+    }
+
     // 0x04
     object Center : Sub {
         override val byteSize: Int
@@ -681,6 +710,16 @@ class PrintInstr(val whoParam: ByteParam, val subs: List<Sub>) : Instruction {
             get() = "center"
 
         override fun emitBytes(out: DataOutput) = out.writeByte(0x04)
+    }
+
+    // 0x06
+    object Left : Sub {
+        override val byteSize: Int
+            get() = 1
+        override val source: String
+            get() = "left"
+
+        override fun emitBytes(out: DataOutput) = out.writeByte(0x06)
     }
 
     // 0x07
@@ -894,7 +933,7 @@ class AssignLiteralToStringInstr(val stringParam: ByteParam, val stringBytes: Sc
 }
 
 //0x2702
-class AssignStringToStringOpcode(val destStringParam: ByteParam, val srcStringParam: ByteParam) : Instruction {
+class AssignStringToStringInstr(val destStringParam: ByteParam, val srcStringParam: ByteParam) : Instruction {
     override fun toSource() = "${v5StringVarName(destStringParam)} = ${v5StringVarName(srcStringParam)}"
     override val length: Int
         get() = 2 + destStringParam.byteCount + srcStringParam.byteCount
@@ -1946,14 +1985,14 @@ object WaitForSentenceInstr : Instruction {
 }
 
 class JumpIfVarNotEqualInstr(val varSpec: VarSpec, val valueParam: WordParam, val offset: Int) : Instruction {
-    override fun toSource(): String = "if ${nameForVar(varSpec)} != ${valueParam.toSource()} jump $offset"
+    override fun toSource(): String = "if ${varSpec.toSourceName()} != ${valueParam.toSource()} jump $offset"
     override val length: Int
         get() = 1 + varSpec.byteCount + valueParam.byteCount + 2
 }
 
 // 0x08/0x88
 class JumpIfVarEqualInstr(val varSpec: VarSpec, val valueParam: WordParam, val offset: Int) : Instruction {
-    override fun toSource(): String = "if ${nameForVar(varSpec)} == ${valueParam.toSource()} jump $offset"
+    override fun toSource(): String = "if ${varSpec.toSourceName()} == ${valueParam.toSource()} jump $offset"
     override val length: Int
         get() = 1 + varSpec.byteCount + valueParam.byteCount + 2
 }
@@ -1972,8 +2011,14 @@ fun decodePrintSubs(data: DataInputStream): MutableList<PrintInstr.Sub> {
             }
 
             1 -> subs.add(PrintInstr.Color(readByteParam(data, opcode2, 0x80)))
-
+            2 -> subs.add(PrintInstr.Clipped(readWordParam(data, opcode2, 0x80)))
+            3 -> {
+                val widthParam = readWordParam(data, opcode2, 0x80)
+                val heightParam = readWordParam(data, opcode2, 0x40)
+                subs.add(PrintInstr.Erase(widthParam, heightParam))
+            }
             4 -> subs.add(PrintInstr.Center)
+            6 -> subs.add(PrintInstr.Left)
             7 -> subs.add(PrintInstr.Overhead)
 
             8 -> {
@@ -2027,7 +2072,7 @@ fun readByteParam(data: DataInput, opcode: Int, parameterMask: Int): ByteParam {
     return if (opcode.and(parameterMask) == 0) {
         ImmediateByteParam(data.readUnsignedByte())
     } else {
-        ByteVarParam(toVarSpec(data.readShortLittleEndian().toInt()))
+        ByteVarParam(readVarSpec(data))
     }
 }
 
@@ -2035,14 +2080,18 @@ fun readWordParam(data: DataInput, opcode: Int, parameterMask: Int): WordParam {
     return if (opcode.and(parameterMask) == 0) {
         ImmediateWordParam(data.readShortLittleEndian().toInt())
     } else {
-        WordVarParam(toVarSpec(data.readShortLittleEndian().toInt()))
+        WordVarParam(readVarSpec(data))
     }
 }
 
-fun readResultVar(data: DataInput): ResultVar {
-    var varNum1 = data.readShortLittleEndian().toInt()
+fun readVarSpec(data: DataInput): VarSpec {
+    val initialVarNum = data.readShortLittleEndian().toInt()
+    return varNumToVarSpec3(initialVarNum, data)
+}
 
-    return ResultVar(toVarSpec(varNum1))
+fun readResultVar(data: DataInput): ResultVar {
+    val initialVarNum = data.readShortLittleEndian().toInt()
+    return ResultVar(varNumToVarSpec3(initialVarNum, data))
 }
 
 // raw string bytes, including \0 terminator
@@ -2056,7 +2105,16 @@ data class ScummStringBytesV5(val bytes: ByteArray) {
     }
 
     val byteCount: Int get() = bytes.size
-    fun toSource(): String = bytes.decodeToString()
+    fun toSource(): String {
+        var endIndex = 0
+
+        while (bytes[endIndex] != 0.toByte()) {
+            // TODO
+            ++endIndex
+        }
+
+        return bytes.decodeToString(0 , endIndex)
+    }
 
     fun emitBytes(out: DataOutput) {
         out.write(bytes)
@@ -2139,7 +2197,7 @@ fun decompileStringAssignOpcode(bytes: ByteArray, offset: Int): Instruction {
         2 -> {
             val destStringParam = readByteParam(data, opcode2, 0x80)
             val srcStringParam = readByteParam(data, opcode2, 0x40)
-            AssignStringToStringOpcode(destStringParam, srcStringParam)
+            AssignStringToStringInstr(destStringParam, srcStringParam)
         }
 
         3 -> {
@@ -2166,17 +2224,87 @@ fun decompileStringAssignOpcode(bytes: ByteArray, offset: Int): Instruction {
     }
 }
 
-fun toVarSpec(varSpec: Int): VarSpec = when {
-    varSpec.and(0x8000) != 0 ->
-        BitVarSpec(varSpec.and(0x7fff), 0)
+sealed interface VarIndexingMode {
+    val byteCount: Int
+}
 
-    varSpec.and(0x4000) != 0 ->
-        LocalVarSpec(varSpec.and(0x3fff))
+object NotIndexed : VarIndexingMode {
+    override val byteCount: Int
+        get() = 0
+}
 
-    varSpec.and(0x2000) != 0 ->
-        VarSpec0x2000(varSpec.and(0x1fff))  // TODO need additional bytes for idx
+class ValueIndexed(val value: Int, override val byteCount: Int = 2) : VarIndexingMode
+class VariableIndexed(val varSpec: VarSpec, override val byteCount: Int = 2) : VarIndexingMode
 
-    else -> GlobalVarSpec(varSpec)
+fun varNumToVarSpec3(initialVarNum: Int, input: DataInput): VarSpec {
+    var varNum = initialVarNum
+    var indexingMode: VarIndexingMode = NotIndexed
+
+    if (initialVarNum and 0x2000 != 0) {
+        val indexValue = input.readShortLittleEndian().toInt()
+
+        if (indexValue and 0x2000 != 0) {
+            val indexVar = varNumToVarSpec3(indexValue and 0x2000.inv(), input)
+            indexingMode = VariableIndexed(indexVar)
+        } else {
+            indexingMode = ValueIndexed(indexValue and 0x2000.inv())
+        }
+
+        varNum = varNum and 0x2000.inv()
+    }
+
+
+    return when {
+        varNum and 0x8000 != 0 ->
+            BitVarSpec(varNum and (0x7fff shr 3), varNum and 7, indexingMode)
+
+        varNum and 0x4000 != 0 ->
+            LocalVarSpec(varNum and 0xfff, indexingMode)
+
+        else -> GlobalVarSpec(varNum, indexingMode)
+    }
+}
+
+//fun readVarSpec(input: DataInput): VarSpec {
+//    var varNum = input.readShortLittleEndian().toInt()
+//
+//    if (varNum and 0x2000 != 0) {
+//        val varNum2 = input.readShortLittleEndian().toInt()
+//
+//        if (varNum2 and 0x2000 != 0) {
+//            // var[num1 + var[num2]]
+//            VarSpecIdxVar(varNum and 0x2000.inv(), varNum2 and 0x2000.inv())
+//        } else {
+//            // var[num1 + num2 & 0xfff]
+//            VarSpecIdxImm(varNum and 0x2000.inv(), varNum2 and 0xfff)
+//        }
+//    }
+//
+//    return when {
+//        varNum and 0x8000 != 0 ->
+//            BitVarSpec(varNum and (0x7fff shr 3), varNum and 7)
+//
+//        varNum and 0x4000 != 0 ->
+//            LocalVarSpec(varNum and 0xfff)
+//
+//        else -> GlobalVarSpec(varNum)
+//    }
+//}
+
+@Deprecated("use readVarSpec instead, since additional script data might need to be read")
+fun toVarSpec(varSpec: Int, data: DataInput): VarSpec {
+    return when {
+        varSpec.and(0x8000) != 0 ->
+            BitVarSpec(varSpec.and(0x7fff), 0, NotIndexed)
+
+        varSpec.and(0x4000) != 0 ->
+            LocalVarSpec(varSpec.and(0x3fff), NotIndexed)
+
+//        varSpec.and(0x2000) != 0 ->
+//            VarSpecIdxImm(varSpec.and(0x1fff))  // TODO need additional bytes for idx
+
+        else -> GlobalVarSpec(varSpec, NotIndexed)
+    }
 }
 
 // 0x44/0xc4	if (@var > @wert)
@@ -2188,7 +2316,7 @@ fun decompileIfVarGreaterThanOpcode(bytes: ByteArray, offset: Int): Instruction 
     val value = readWordParam(data, opcode, 0x80)
     val jumpOffset = data.readShortLittleEndian().toInt()
 
-    return JumpIfVarLessEqualInstr(toVarSpec(varSpec), value, jumpOffset)
+    return JumpIfVarLessEqualInstr(toVarSpec(varSpec, data), value, jumpOffset)
 }
 
 // 0x48/0xc8	if (<var> != <word-param>) jump <offs>
@@ -2196,18 +2324,18 @@ fun decompileIfVarEqualOpcode(bytes: ByteArray, offset: Int): Instruction {
     val data = DataInputStream(ByteArrayInputStream(bytes, offset, bytes.size - offset))
 
     val opcode = data.readUnsignedByte()
-    val varSpec = data.readShortLittleEndian().toInt()
+    val varSpec = readVarSpec(data)
     val value = readWordParam(data, opcode, 0x80)
     val skipOffset = data.readShortLittleEndian().toInt()
 
-    return JumpIfVarNotEqualInstr(toVarSpec(varSpec), value, skipOffset)
+    return JumpIfVarNotEqualInstr(varSpec, value, skipOffset)
 }
 
 fun decompileJumpIfEqualInstr(bytes: ByteArray, offset: Int): Instruction {
     val data = DataInputStream(ByteArrayInputStream(bytes, offset, bytes.size - offset))
 
     val opcode = data.readUnsignedByte()
-    val varSpec = toVarSpec(data.readShortLittleEndian().toInt())
+    val varSpec = toVarSpec(data.readShortLittleEndian().toInt(), data)
     val valueParam = readWordParam(data, opcode, 0x80)
     val skipOffset = data.readShortLittleEndian().toInt()
 

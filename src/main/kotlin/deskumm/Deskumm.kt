@@ -21,58 +21,92 @@ sealed interface VarSpec {
     fun toSourceName(): String
     val byteCount: Int
     fun emitBytes(out: DataOutput)
+    val indexingMode: VarIndexingMode
 }
 
-class GlobalVarSpec(val varNum: Int) : VarSpec {
-    override fun toSourceName() = nameForGlobalVar(this)
+abstract class VarSpecBase(override val indexingMode: VarIndexingMode = NotIndexed) : VarSpec
+
+class GlobalVarSpec(val varNum: Int, indexingMode: VarIndexingMode = NotIndexed) : VarSpecBase(indexingMode) {
+    override fun toSourceName(): String {
+        val globalVarName = nameForGlobalVar(this)
+
+        return when (indexingMode) {
+            NotIndexed -> globalVarName
+            is ValueIndexed -> "$globalVarName[${indexingMode.value}]"
+            is VariableIndexed -> "$globalVarName[${indexingMode.varSpec.toSourceName()}]"
+        }
+    }
+
     override val byteCount: Int
-        get() = 2
+        get() = 2 + indexingMode.byteCount
 
     override fun emitBytes(out: DataOutput) {
         out.writeShortLittleEndian(varNum.toShort())
+        TODO()  // indexing
 //        out.writeByte(varNum.shr(8))
 //        out.writeByte(varNum)
     }
 }
 
-class LocalVarSpec(val varNum: Int) : VarSpec {
-    override fun toSourceName() = "local$varNum"
+class LocalVarSpec(val varNum: Int, indexingMode: VarIndexingMode) : VarSpecBase(indexingMode) {
+    override fun toSourceName() = when (indexingMode) {
+        NotIndexed -> "local$varNum"
+        is ValueIndexed -> "local$varNum[${indexingMode.value}]"
+        is VariableIndexed -> "local$varNum[${indexingMode.varSpec.toSourceName()}]"
+    }
+
     override val byteCount: Int
-        get() = 2
+        get() = 2 + indexingMode.byteCount
 
     override fun emitBytes(out: DataOutput) {
         val value = varNum.and(0x3fff).or(0x4000).toShort()
         println("LVS, emit; value varnum $varNum -> 0x${value.toHexString()}")
         out.writeShortLittleEndian(value)
-        // TODO set bits for local var
+        TODO()  // indexing
 //        out.writeByte(varNum.shr(8))
 //        out.writeByte(varNum)
     }
 }
 
-class BitVarSpec(val varNum: Int, val bitNum: Int) : VarSpec {
-    override fun toSourceName() = "bit$varNum:$bitNum"
+class BitVarSpec(val varNum: Int, val bitNum: Int, indexingMode: VarIndexingMode) : VarSpecBase(indexingMode) {
+    override fun toSourceName() = when (indexingMode) {
+        NotIndexed -> "bit$varNum:$bitNum"
+        is ValueIndexed -> "bit$varNum:$bitNum[${indexingMode.value}]"
+        is VariableIndexed -> "bit$varNum:$bitNum[${indexingMode.varSpec.toSourceName()}]"
+    }
+
     override val byteCount: Int
-        get() = 2
+        get() = 2 + indexingMode.byteCount
 
     override fun emitBytes(out: DataOutput) {
         // TODO set bits for bit var
+        TODO()  // indexing
         out.writeByte(varNum.shr(8))
         out.writeByte(varNum)
     }
 }
 
-class VarSpec0x2000(val varNum: Int) : VarSpec {
-    override fun toSourceName() = "TODOvar0x2000_$varNum"
-    override val byteCount: Int
-        get() = 2
-
-    override fun emitBytes(out: DataOutput) {
-        // TODO set bits for var spec
-        out.writeByte(varNum.shr(8))
-        out.writeByte(varNum)
-    }
-}
+//class VarSpecIdxVar(val baseVarNum: Int, val indexVar: Int) : VarSpec {
+//    override fun toSourceName() = "TODO var$baseVarNum[var$indexVar]"
+//    override val byteCount: Int
+//        get() = 2
+//
+//    override fun emitBytes(out: DataOutput) {
+//        out.writeShortLittleEndian(baseVarNum.toShort() or 0x2000)
+//        out.writeShortLittleEndian(indexVar.toShort() or 0x2000)
+//    }
+//}
+//
+//class VarSpecIdxImm(val baseVarNum: Int, val index: Int) : VarSpec {
+//    override fun toSourceName() = "TODO var$baseVarNum[$index]"
+//    override val byteCount: Int
+//        get() = 2
+//
+//    override fun emitBytes(out: DataOutput) {
+//        out.writeShortLittleEndian(baseVarNum.toShort() or 0x2000)
+//        out.writeShortLittleEndian(index.toShort() and 0xfff)
+//    }
+//}
 
 val globalVarNames = mapOf(
     0 to "last-result",
@@ -100,12 +134,12 @@ val globalVarNames = mapOf(
     69 to "video-spéed"
 )
 
+@Deprecated("use varSpec specific methods instead")
 fun nameForVar(varSpec: VarSpec) = when (varSpec) {
     is GlobalVarSpec -> nameForGlobalVar(varSpec)
     is BitVarSpec -> "bit${varSpec.varNum}:${varSpec.bitNum}"
     is LocalVarSpec -> "local${varSpec.varNum}"
-    is VarSpec0x2000 -> "TODOvar0x2000_${varSpec.varNum}"
-//    else -> "var?!"
+    else -> "var?! $varSpec"
 }
 
 fun nameForGlobalVar(varSpec: GlobalVarSpec): String =
@@ -276,11 +310,11 @@ fun decompileInstruction(bytes: ByteArray, offset: Int): Instruction? {
             val data = DataInputStream(ByteArrayInputStream(bytes, offset, bytes.size - offset))
 
             data.readByte()
-            val varSpec = data.readShortLittleEndian().toInt()
-            val value = data.readShortLittleEndian().toInt()
+            val varSpec = readVarSpec(data)
+            val value = readWordParam(data, opcode, 0x80)
             val skipOffset = data.readShortLittleEndian().toInt()
 
-            IfVarLessOrEqualOpcode(toVarSpec(varSpec), value, skipOffset)
+            JumpIfVarGreaterInstr(varSpec, value, skipOffset)
         }
 
         0x05, 0x85 -> {
@@ -558,7 +592,7 @@ fun decompileInstruction(bytes: ByteArray, offset: Int): Instruction? {
         0x27 -> decompileStringAssignOpcode(bytes, offset)
 
         0x28 -> {
-            val varSpec = toVarSpec(data.readShortLittleEndian().toInt())
+            val varSpec = toVarSpec(data.readShortLittleEndian().toInt(), data)
             val jumpOffset = data.readShortLittleEndian().toInt()
 
             JumpIfVarNotZeroInstr(varSpec, jumpOffset)
@@ -572,7 +606,7 @@ fun decompileInstruction(bytes: ByteArray, offset: Int): Instruction? {
         }
 
         0x2b -> {
-            val varSpec = toVarSpec(data.readShortLittleEndian().toInt())
+            val varSpec = toVarSpec(data.readShortLittleEndian().toInt(), data)
             SleepForVarJiffiesInstr(varSpec)
         }
 
@@ -704,7 +738,7 @@ fun decompileInstruction(bytes: ByteArray, offset: Int): Instruction? {
         }
 
         0x38, 0xb8 -> {
-            val varSpec = toVarSpec(data.readShortLittleEndian().toInt())
+            val varSpec = readVarSpec(data)
             val valueParam = readWordParam(data, opcode, 0x80)
             val offset = data.readShortLittleEndian().toInt()
 
@@ -759,7 +793,7 @@ fun decompileInstruction(bytes: ByteArray, offset: Int): Instruction? {
         0x44, 0xc4 -> decompileIfVarGreaterThanOpcode(bytes, offset)
 
         0x46 -> {
-            val varSpec = toVarSpec(data.readShortLittleEndian().toInt())
+            val varSpec = toVarSpec(data.readShortLittleEndian().toInt(), data)
             IncrementVarOpcode(varSpec)
         }
 
@@ -822,7 +856,7 @@ fun decompileInstruction(bytes: ByteArray, offset: Int): Instruction? {
         }
 
         0x67 -> {
-            val varSpec = toVarSpec(data.readShortLittleEndian().toInt())
+            val varSpec = toVarSpec(data.readShortLittleEndian().toInt(), data)
             val objSpec = toObjSpec(data.readByte().toInt())
             AssignObjectWidthToVar(varSpec, objSpec)
         }
@@ -927,7 +961,7 @@ fun decompileInstruction(bytes: ByteArray, offset: Int): Instruction? {
         0xa0 -> EndScriptInstr
 
         0xa8 -> {
-            val varSpec = toVarSpec(data.readShortLittleEndian().toInt())
+            val varSpec = toVarSpec(data.readShortLittleEndian().toInt(), data)
             val skipOffset = data.readShortLittleEndian().toInt()
 
             return JumpIfVarZeroInst(varSpec, skipOffset)
@@ -1019,6 +1053,8 @@ fun main(args: Array<String>) = DeskummCommand().main(args)
 
 class DeskummCommand : CliktCommand() {
     val scriptPath by argument(name = "script-path").file(mustExist = true, canBeDir = false)
+    val outputFile by option("-o", "--output", help = "Output file").file(mustExist = false, canBeDir = false)
+
     val listReferencedScripts by option("--list-referenced-scripts", "-l").flag(default = false)
 
     override fun run() {
@@ -1033,7 +1069,11 @@ class DeskummCommand : CliktCommand() {
                     val referencedScripts = collectReferencedScripts(offsetAndInstructions.map { it.second })
 
                     if (!referencedScripts.isEmpty()) {
-                        println("referenced scripts: ${referencedScripts.sortedBy { it.id }.joinToString { it.id.toString() }}")
+                        println(
+                            "referenced scripts: ${
+                                referencedScripts.sortedBy { it.id }.joinToString { it.id.toString() }
+                            }"
+                        )
                     } else {
                         println("no referenced scripts found")
                     }
@@ -1050,9 +1090,19 @@ class DeskummCommand : CliktCommand() {
                 }
             }
             .mapBoth(
-                success = { strings -> strings.forEach { println(it) } },
+                success = { strings ->
+                    if (outputFile != null) {
+                        PrintStream(outputFile).use { out -> printStrings(strings, out) }
+                    } else {
+                        printStrings(strings, System.out)
+                    }
+                },
                 failure = { err -> println(err) }
             )
+    }
+
+    private fun printStrings(strings: List<String>, out: PrintStream) {
+        strings.forEach { out.println(it) }
     }
 
     private fun collectReferencedScripts(instructions: Collection<Instruction>): Collection<ScriptReference> {
