@@ -3,6 +3,7 @@ package deskumm
 import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.core.main
 import com.github.ajalt.clikt.parameters.arguments.argument
+import deskumm.PrintInstr.Text
 import java.io.*
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -39,7 +40,10 @@ fun writeDummyLecfFileForRoomAndScript(path: Path) {
         FileInputStream(Paths.get("data/COST/mi2_142_room7_590264.COST").toFile()).use { it.copyTo(out) }
 
         val bytes = ByteArrayOutputStream()
-        DataOutputStream(bytes).use { emitDummyScriptBytes(it) }
+        DataOutputStream(bytes).use {
+            emitCharsetScriptBytes(it)
+//            emitDummyScriptBytes(it)
+        }
         val scrpBlock = ScrpBlockV5(bytes.toByteArray())
         scrpBlock.writeTo(out)
         DataOutputStream(FileOutputStream(Paths.get("data/SCRP/dummy.SCRP").toFile())).use { scrpBlock.writeTo(it) }
@@ -63,6 +67,64 @@ fun writeDummyLecfFileForScript(path: Path) {
         val scrpBlock = ScrpBlockV5(bytes.toByteArray())
         scrpBlock.writeTo(out)
     }
+}
+
+fun emitCharsetScriptBytes(dataOut: DataOutput) {
+//    emitBytesForBannerColorString(dataOut)
+//    emitString44(dataOut)
+    val theRoom = 113
+    val roomParam = ImmediateByteParam(theRoom)
+    LockRoomInstr(roomParam).emitBytes(dataOut)
+    LoadRoomInstr(roomParam).emitBytes(dataOut)
+    CurrentRoomInstr(roomParam).emitBytes(dataOut)
+
+    (1..8).forEach { idx ->
+        LoadCharsetInstr(ImmediateByteParam(idx)).emitBytes(dataOut)
+        CharsetInstr(ImmediateByteParam(idx)).emitBytes(dataOut)
+
+        emitPrintText(
+            dataOut,
+            "charset $idx",
+            listOf(
+                PrintInstr.At(ImmediateWordParam(100), ImmediateWordParam(15 * idx)),
+                PrintInstr.Color(ImmediateByteParam(3)),
+                PrintInstr.Left
+            )
+        )
+
+        SleepForJiffiesInstr(30).emitBytes(dataOut)
+    }
+
+    (1..5).forEach { code ->
+        val stringBytes =
+            ScummStringBytesV5("code $code: ".encodeToByteArray()
+                    + byteArrayOf(0xfe.toByte(), code.toByte())
+                    + ", ich bin gespannt".encodeToByteArray() + byteArrayOf(0x00))
+        PrintInstr(
+            ImmediateByteParam(0xfe),
+            listOf<PrintInstr.Sub>(PrintInstr.At(ImmediateWordParam(0), ImmediateWordParam(15 * code))) + Text(stringBytes)
+        ).emitBytes(dataOut)
+    }
+
+    val printInstr = PrintInstr(
+        ImmediateByteParam(0xfe),
+        listOf(
+            PrintInstr.At(ImmediateWordParam(30), ImmediateWordParam(0)),
+            Text(
+                ScummStringBytesV5(
+                    "var 45: ".encodeToByteArray() + byteArrayOf(
+                        0xff.toByte(),
+                        4
+                    ) + GlobalVarSpec(45).bytes + byteArrayOf(0)
+                )
+            )
+        )
+    )
+    printInstr.emitBytes(dataOut)
+
+    BreakHereInstr.emitBytes(dataOut)
+
+    JumpInstr(-(printInstr.length + 4))
 }
 
 fun emitDummyScriptBytes(dataOut: DataOutput) {

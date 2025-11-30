@@ -544,6 +544,20 @@ class ActorInstr(val actorParam: ByteParam, val subs: List<Sub>) : Instruction {
         }
     }
 
+    // 0x11
+    class Scale(val param1: ByteParam, val param2: ByteParam) : Sub {
+        override val byteSize: Int
+            get() = 1 + param1.byteCount + param2.byteCount
+        override val source: String
+            get() = "scale ${param1.toSource()}, ${param2.toSource()}"
+
+        override fun emitBytes(out: DataOutput) {
+            out.writeByte(applyParamBits(0x11, param1, param2))
+            param1.emitBytes(out)
+            param2.emitBytes(out)
+        }
+    }
+
     // 0x12
     object NeverZClip : Sub {
         override val byteSize: Int
@@ -875,14 +889,14 @@ class AssignVarRangeB(val resultVar: ResultVar, val values: List<Int>) : Instruc
     override fun toSource(): String = "${resultVar.toSource()}... := ${values.joinToString()}"
 
     override val length: Int
-        get() = 1 + resultVar.byteCount + values.size
+        get() = 2 /* opcode, # values */ + resultVar.byteCount + values.size
 }
 
 class AssignVarRangeW(val resultVar: ResultVar, val values: List<Int>) : Instruction {
     override fun toSource(): String = "${resultVar.toSource()}... := ${values.joinToString()}"
 
     override val length: Int
-        get() = 1 + resultVar.byteCount + values.size * 2
+        get() = 2 /* opcode, # values */ + resultVar.byteCount + values.size * 2
 }
 
 fun v5StringVarName(param: Instruction.Param): String {
@@ -1207,14 +1221,14 @@ class FadesInstr(val aParam: WordParam) : Instruction {
         get() = 2 + aParam.byteCount
 }
 
-object CursorOnInstr : SimpleInstr( "cursor on", byteArrayOf(0x2c, 0x01))
-object CursorOffInstr : SimpleInstr( "cursor off", byteArrayOf(0x2c, 0x02))
-object UserPutOn : SimpleInstr( "userput on", byteArrayOf(0x2c, 0x03))
-object UserPutOff : SimpleInstr( "userput off", byteArrayOf(0x2c, 0x04))
-object CursorSoftOn : SimpleInstr( "cursor soft-on", byteArrayOf(0x2c, 0x05))
-object CursorSoftOff : SimpleInstr( "cursor soft-off", byteArrayOf(0x2c, 0x06))
-object UserPutSoftOn : SimpleInstr( "userput soft-on", byteArrayOf(0x2c, 0x07))
-object UserPutSoftOff : SimpleInstr( "userput soft-off", byteArrayOf(0x2c, 0x08))
+object CursorOnInstr : SimpleInstr( "cursor-on", byteArrayOf(0x2c, 0x01))
+object CursorOffInstr : SimpleInstr( "cursor-off", byteArrayOf(0x2c, 0x02))
+object UserPutOn : SimpleInstr( "userput-on", byteArrayOf(0x2c, 0x03))
+object UserPutOff : SimpleInstr( "userput-off", byteArrayOf(0x2c, 0x04))
+object CursorSoftOn : SimpleInstr( "cursor-soft-on", byteArrayOf(0x2c, 0x05))
+object CursorSoftOff : SimpleInstr( "cursor-soft-off", byteArrayOf(0x2c, 0x06))
+object UserPutSoftOn : SimpleInstr( "userput-soft-on", byteArrayOf(0x2c, 0x07))
+object UserPutSoftOff : SimpleInstr( "userput-soft-off", byteArrayOf(0x2c, 0x08))
 
 class CursorImageInstr(val cursorParam: ByteParam, val imageParam: ByteParam) : Instruction {
     override fun toSource(): String = "cursor ${cursorParam.toSource()} image ${imageParam.toSource()}"
@@ -1499,6 +1513,14 @@ class AddAssignInstr(val resultVar: ResultVar, val valueParam: WordParam) : Inst
     override fun toSource(): String {
         return "${resultVar.toSource()} += ${valueParam.toSource()}"
     }
+
+    override val length: Int
+        get() = 1 + resultVar.byteCount + valueParam.byteCount
+}
+
+// 0x5b/0xdb
+class DivAssignInstr(val resultVar: ResultVar, val valueParam: WordParam) : Instruction {
+    override fun toSource(): String = "${resultVar.toSource()} /= ${valueParam.toSource()}"
 
     override val length: Int
         get() = 1 + resultVar.byteCount + valueParam.byteCount
@@ -2106,14 +2128,54 @@ data class ScummStringBytesV5(val bytes: ByteArray) {
 
     val byteCount: Int get() = bytes.size
     fun toSource(): String {
-        var endIndex = 0
+        var index = 0
 
-        while (bytes[endIndex] != 0.toByte()) {
-            // TODO
-            ++endIndex
+        val sourceString = buildString {
+            val stringInput = DataInputStream(ByteArrayInputStream(bytes))
+            var stringByte = stringInput.readUnsignedByte()
+
+            while (stringByte != 0) {
+                if (stringByte == 0xff) {
+                    when (val code = stringInput.readUnsignedByte()) {
+                        1 -> append("\\{nl}")
+                        2 -> append("\\{keep}")
+                        3 -> append("\\{wait}")
+                        8 -> append("\\{$code}")
+
+                        4 -> {
+                            val varString = readVarSpec(stringInput).toSourceName()
+                            append("\\{var($varString)")
+                        }
+                        5 -> {
+                            val varString = readVarSpec(stringInput).toSourceName()
+                            append("\\{verb($varString)}")
+                        }
+                        6 -> {
+                            val varString = readVarSpec(stringInput).toSourceName()
+                            append("\\{name($varString)}")}
+                        7 -> {
+                            val varString = readVarSpec(stringInput).toSourceName()
+                            append("\\{string($varString)}")
+                        }
+
+                        9, 10, 12, 13, 14 -> append("\\{$code(${stringInput.readUnsignedByte()}, ${stringInput.readUnsignedByte()})}")
+                    }
+                } else when (stringByte) {
+                    0x81 -> append('ü')
+                    0x84 -> append('ä')
+                    0x8e -> append('Ä')
+                    0x94 -> append('ö')
+                    0x99 -> append('Ö')
+                    0x9a -> append('Ü')
+                    0xe1 -> append('ß')
+                    else -> append(stringByte.toChar())
+                }
+
+                stringByte = stringInput.readUnsignedByte()
+            }
         }
 
-        return bytes.decodeToString(0 , endIndex)
+        return sourceString
     }
 
     fun emitBytes(out: DataOutput) {

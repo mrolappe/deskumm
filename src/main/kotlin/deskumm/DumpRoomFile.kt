@@ -36,6 +36,8 @@ enum class RoomFileBlockId(val id: String) {
     IM02("IM02"),
     IM03("IM03"),
     IM04("IM04"),
+    IM05("IM05"),
+    IM06("IM06"),
     EXCD("EXCD"),
     LSCR("LSCR"),
     NLSC("NLSC"),
@@ -386,7 +388,10 @@ class DumpRoomFileCommand : CliktCommand() {
 
             val peekBlockId = file.peekBlockId()
             logger.debug { "peek block id: $peekBlockId" }
-            skipBlocksWithId(file, RoomFileBlockId.IM00, RoomFileBlockId.IM01, RoomFileBlockId.IM02, RoomFileBlockId.IM03, RoomFileBlockId.IM04)
+            skipBlocksWithId(file, RoomFileBlockId.IM00, RoomFileBlockId.IM01, RoomFileBlockId.IM02, RoomFileBlockId.IM03, RoomFileBlockId.IM04,
+                RoomFileBlockId.IM05,
+                RoomFileBlockId.IM06)
+
             when(peekBlockId) {
                 else -> {}
             }

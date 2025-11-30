@@ -40,9 +40,14 @@ class GlobalVarSpec(val varNum: Int, indexingMode: VarIndexingMode = NotIndexed)
     override val byteCount: Int
         get() = 2 + indexingMode.byteCount
 
+    val bytes: ByteArray
+        get() = ByteArrayOutputStream().use { baos -> DataOutputStream(baos).use { emitBytes(it) }; baos.toByteArray() }
+
     override fun emitBytes(out: DataOutput) {
+        if (indexingMode !is NotIndexed) {
+            TODO()  // indexing
+        }
         out.writeShortLittleEndian(varNum.toShort())
-        TODO()  // indexing
 //        out.writeByte(varNum.shr(8))
 //        out.writeByte(varNum)
     }
@@ -70,9 +75,9 @@ class LocalVarSpec(val varNum: Int, indexingMode: VarIndexingMode) : VarSpecBase
 
 class BitVarSpec(val varNum: Int, val bitNum: Int, indexingMode: VarIndexingMode) : VarSpecBase(indexingMode) {
     override fun toSourceName() = when (indexingMode) {
-        NotIndexed -> "bit$varNum:$bitNum"
-        is ValueIndexed -> "bit$varNum:$bitNum[${indexingMode.value}]"
-        is VariableIndexed -> "bit$varNum:$bitNum[${indexingMode.varSpec.toSourceName()}]"
+        NotIndexed -> "bit$varNum.$bitNum"
+        is ValueIndexed -> "bit$varNum[${indexingMode.value}].$bitNum"
+        is VariableIndexed -> "bit$varNum[${indexingMode.varSpec.toSourceName()}].$bitNum"
     }
 
     override val byteCount: Int
@@ -456,7 +461,7 @@ fun decompileInstruction(bytes: ByteArray, offset: Int): Instruction? {
                     13 -> ActorInstr.Name(data.readScummStringBytes())
 //                    14 -> ActorInstr.InitAnimation(readByteParam(data, opcode2, 0x80))
 //                    16 -> ActorInstr.Width(readByteParam(data, opcode2, 0x80))
-//                    17 -> ActorInstr.Scale(readByteParam(data, opcode2, 0x80), readByteParam(data, opcode2, 0x40))
+                    17 -> ActorInstr.Scale(readByteParam(data, opcode2, 0x80), readByteParam(data, opcode2, 0x40))
                     18 -> ActorInstr.NeverZClip
                     19 -> ActorInstr.AlwaysZClip(readByteParam(data, opcode2, 0x80))
                     20 -> ActorInstr.IgnoreBoxes
@@ -828,6 +833,13 @@ fun decompileInstruction(bytes: ByteArray, offset: Int): Instruction? {
             AddAssignInstr(resultVar, valueParam)
         }
 
+        0x5b, 0xdb -> {
+            val resultVar = readResultVar(data)
+            val valueParam = readWordParam(data, opcode, 0x80)
+
+            DivAssignInstr(resultVar, valueParam)
+        }
+
         0x5d, 0xdd -> {
             val objectParam = readWordParam(data, opcode, 0x80)
 
@@ -961,7 +973,7 @@ fun decompileInstruction(bytes: ByteArray, offset: Int): Instruction? {
         0xa0 -> EndScriptInstr
 
         0xa8 -> {
-            val varSpec = toVarSpec(data.readShortLittleEndian().toInt(), data)
+            val varSpec = readVarSpec(data)
             val skipOffset = data.readShortLittleEndian().toInt()
 
             return JumpIfVarZeroInst(varSpec, skipOffset)
